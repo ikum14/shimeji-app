@@ -1,0 +1,10 @@
+<resources>
+    <string name="app_name">Desktop Pet Shimeji</string>
+    <string name="overlay_permission_title">Izin Floating Overlay</string>
+    <string name="overlay_permission_desc">Untuk memunculkan karakter Chibi Pet di atas layar HP Android (di atas aplikasi lain), aktifkan izin "Tampilkan di atas aplikasi lain".</string>
+    <string name="grant_permission">Izinkan Overlay</string>
+    <string name="start_pet_overlay">Aktifkan Floating Pet</string>
+    <string name="stop_pet_overlay">Hentikan Floating Pet</string>
+    <string name="hide_pet">Sembunyikan (Hide)</string>
+    <string name="show_pet">Tampilkan Pet</string>
+</resources>

@@ -1,0 +1,6 @@
+{
+  "name": "Desktop Pet Shimeji",
+  "description": "Desktop Pet Chibi Girl with Floating Overlay Window, Drag & Stair-fall physics, Hide/Show controls, and Pet interactions.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
