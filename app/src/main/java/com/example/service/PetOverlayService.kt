@@ -30,6 +30,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 
+private enum class PetBehaviorState { IDLE, WALK_LEFT, WALK_RIGHT, CLIMB_UP, CLIMB_DOWN }
+
 class PetOverlayService : Service() {
 
     private lateinit var windowManager: WindowManager
@@ -45,10 +47,15 @@ class PetOverlayService : Service() {
     private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
     private var fallingJob: Job? = null
     private var idleTimerJob: Job? = null
+    private var behaviorJob: Job? = null
 
     private var isDragging = false
     private var isFalling = false
     private var isPetHidden = false
+
+    private var petSizePx = 0
+    private var behaviorState = PetBehaviorState.IDLE
+    private var behaviorTicksRemaining = 0
 
     // Leveling & Emotion Timer States for Overlay Pet (Timestamp based for Doze Mode safety)
     private var petLevel = 5
@@ -72,6 +79,7 @@ class PetOverlayService : Service() {
         listenForNotificationBus()
         listenForPetDataBus()
         startIdleEmotionTimer()
+        startAutonomousBehaviorLoop()
     }
 
     private fun syncToObsidian() {
@@ -233,6 +241,7 @@ class PetOverlayService : Service() {
             setImageResource(R.drawable.img_chibi_pet_idle)
             scaleType = ImageView.ScaleType.FIT_CENTER
             val sizePx = (110 * resources.displayMetrics.density).toInt()
+            petSizePx = sizePx
             layoutParams = LinearLayout.LayoutParams(sizePx, sizePx)
         }
 
@@ -305,6 +314,8 @@ class PetOverlayService : Service() {
                         fallingJob?.cancel()
                         isDragging = true
                         isFalling = false
+                        behaviorState = PetBehaviorState.IDLE
+                        behaviorTicksRemaining = 0
 
                         initialX = p.x
                         initialY = p.y
@@ -337,9 +348,13 @@ class PetOverlayService : Service() {
                             petImage?.setImageResource(R.drawable.img_chibi_pet_idle)
                             speechText?.text = PetQuotes.tapQuotes.random()
                             handleUserInteraction(5)
+                            behaviorState = PetBehaviorState.IDLE
+                            behaviorTicksRemaining = 0
                         } else {
                             // Released after drag -> Trigger Stair-fall physics!
                             handleUserInteraction(2)
+                            behaviorState = PetBehaviorState.IDLE
+                            behaviorTicksRemaining = 0
                             startStairFallPhysics()
                         }
                         return true
@@ -356,10 +371,104 @@ class PetOverlayService : Service() {
         }
     }
 
+    private fun startAutonomousBehaviorLoop() {
+        behaviorJob?.cancel()
+        behaviorJob = serviceScope.launch {
+            while (true) {
+                delay(TICK_MS)
+                if (isDragging || isFalling || isPetHidden) continue
+                val p = params ?: continue
+                val displayMetrics = resources.displayMetrics
+                val floorY = displayMetrics.heightPixels - 300
+                val topMarginY = (100 * displayMetrics.density).toInt()
+                val rightEdgeX = displayMetrics.widthPixels - petSizePx
+
+                if (behaviorState == PetBehaviorState.IDLE || behaviorState == PetBehaviorState.WALK_LEFT || behaviorState == PetBehaviorState.WALK_RIGHT) {
+                    behaviorTicksRemaining--
+                    if (behaviorTicksRemaining <= 0) {
+                        decideNextBehavior()
+                    }
+                }
+
+                applyBehaviorStep(p, floorY, topMarginY, rightEdgeX)
+            }
+        }
+    }
+
+    private fun decideNextBehavior() {
+        behaviorState = listOf(
+            PetBehaviorState.IDLE,
+            PetBehaviorState.WALK_LEFT,
+            PetBehaviorState.WALK_RIGHT
+        ).random()
+        // Idle sebentar (1-2 detik) atau jalan lebih lama (2.5-6 detik)
+        behaviorTicksRemaining = if (behaviorState == PetBehaviorState.IDLE) {
+            (20..40).random()
+        } else {
+            (50..120).random()
+        }
+        petImage?.scaleX = if (behaviorState == PetBehaviorState.WALK_LEFT) -1f else 1f
+    }
+
+    private fun applyBehaviorStep(p: WindowManager.LayoutParams, floorY: Int, topMarginY: Int, rightEdgeX: Int) {
+        var moved = false
+        when (behaviorState) {
+            PetBehaviorState.WALK_LEFT -> {
+                p.x = (p.x - WALK_SPEED_PX).coerceAtLeast(0)
+                moved = true
+                if (p.x <= 0) {
+                    behaviorState = PetBehaviorState.CLIMB_UP
+                    behaviorTicksRemaining = 0
+                    speechText?.text = "Manjat ah~ 🧗"
+                }
+            }
+            PetBehaviorState.WALK_RIGHT -> {
+                p.x = (p.x + WALK_SPEED_PX).coerceAtMost(rightEdgeX)
+                moved = true
+                if (p.x >= rightEdgeX) {
+                    behaviorState = PetBehaviorState.CLIMB_UP
+                    behaviorTicksRemaining = 0
+                    speechText?.text = "Manjat ah~ 🧗"
+                }
+            }
+            PetBehaviorState.CLIMB_UP -> {
+                p.y = (p.y - CLIMB_SPEED_PX).coerceAtLeast(topMarginY)
+                moved = true
+                if (p.y <= topMarginY) {
+                    if ((0..2).random() == 0) {
+                        behaviorState = PetBehaviorState.CLIMB_DOWN
+                        behaviorTicksRemaining = 0
+                        speechText?.text = "Turun lagi ah~"
+                    } else {
+                        decideNextBehavior()
+                    }
+                }
+            }
+            PetBehaviorState.CLIMB_DOWN -> {
+                p.y = (p.y + CLIMB_SPEED_PX).coerceAtMost(floorY)
+                moved = true
+                if (p.y >= floorY) {
+                    decideNextBehavior()
+                }
+            }
+            PetBehaviorState.IDLE -> { /* diam di tempat */ }
+        }
+
+        if (moved) {
+            try {
+                windowManager.updateViewLayout(overlayView, p)
+            } catch (e: Exception) {
+                // View belum siap / service sedang berhenti, abaikan
+            }
+        }
+    }
+
     private fun startStairFallPhysics() {
         val p = params ?: return
         val displayMetrics = resources.displayMetrics
-        val screenHeight = displayMetrics.heightPixels - 300
+        val floorY = displayMetrics.heightPixels - 300
+        val maxFallDistancePx = (250 * displayMetrics.density).toInt() // jatuh maksimal ~250dp, bukan selalu ke dasar layar
+        val screenHeight = (p.y + maxFallDistancePx).coerceAtMost(floorY)
         val screenWidth = displayMetrics.widthPixels - 200
 
         fallingJob?.cancel()
@@ -421,9 +530,9 @@ class PetOverlayService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
-        serviceScope.launch {
-            fallingJob?.cancel()
-        }
+        fallingJob?.cancel()
+        idleTimerJob?.cancel()
+        behaviorJob?.cancel()
         overlayView?.let {
             try {
                 windowManager.removeView(it)
@@ -435,5 +544,8 @@ class PetOverlayService : Service() {
 
     companion object {
         private const val NOTIFICATION_ID = 1001
+        private const val TICK_MS = 50L
+        private const val WALK_SPEED_PX = 5
+        private const val CLIMB_SPEED_PX = 5
     }
 }
