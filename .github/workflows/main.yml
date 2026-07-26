@@ -24,10 +24,10 @@ jobs:
         distribution: 'temurin'
         cache: gradle
 
-    - name: Setup Gradle 9.1.0
+    - name: Setup Gradle 9.3.1
       uses: gradle/actions/setup-gradle@v4
       with:
-        gradle-version: '9.1.0'
+        gradle-version: '9.3.1'
 
     - name: Build debug APK
       run: gradle assembleDebug --stacktrace
@@ -46,4 +46,3 @@ jobs:
       with:
         name: build-logs
         path: app/build/outputs
-        
