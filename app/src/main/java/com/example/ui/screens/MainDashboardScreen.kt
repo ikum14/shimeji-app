@@ -88,8 +88,6 @@ import com.example.data.PetProgressData
 import com.example.service.IncomingPetNotification
 import com.example.service.NotificationBus
 import com.example.model.CostumeManager
-import com.example.data.GoogleDriveBackupManager
-import com.example.data.GoogleDriveBackupWorker
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.rememberCoroutineScope
@@ -185,47 +183,6 @@ fun MainDashboardScreen() {
         savePetProgressToMarkdown()
     }
 
-    // Google Drive Backup States & Launcher
-    val coroutineScope = rememberCoroutineScope()
-    var driveAccount by remember { mutableStateOf(GoogleDriveBackupManager.getSignedInAccount(context)) }
-    var isUploadingToDrive by remember { mutableStateOf(false) }
-    var autoBackupEnabled by remember { mutableStateOf(true) }
-    var driveBackupStatusMsg by remember { mutableStateOf("") }
-
-    val googleSignInLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        val task = com.google.android.gms.auth.api.signin.GoogleSignIn.getSignedInAccountFromIntent(result.data)
-        try {
-            val account = task.getResult(com.google.android.gms.common.api.ApiException::class.java)
-            driveAccount = account
-            Toast.makeText(context, "Terhubung ke Google Drive: ${account.email}", Toast.LENGTH_SHORT).show()
-            if (autoBackupEnabled) {
-                GoogleDriveBackupWorker.scheduleMidnightBackup(context)
-            }
-        } catch (e: Exception) {
-            Toast.makeText(context, "Gagal Login Google Drive: ${e.message}", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    fun uploadBackupToDrive() {
-        coroutineScope.launch {
-            isUploadingToDrive = true
-            driveBackupStatusMsg = "Mengunggah pet_progress.md ke Google Drive..."
-            val result = GoogleDriveBackupManager.uploadBackupToDrive(context, targetFile)
-            isUploadingToDrive = false
-            if (result.isSuccess) {
-                val msg = result.getOrNull() ?: "Backup Sukses!"
-                driveBackupStatusMsg = msg
-                Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
-            } else {
-                val err = result.exceptionOrNull()?.message ?: "Gagal Backup"
-                driveBackupStatusMsg = "❌ $err"
-                Toast.makeText(context, "Gagal upload ke Drive: $err", Toast.LENGTH_LONG).show()
-            }
-        }
-    }
-
     // Check overlay permission
     var hasOverlayPermission by remember {
         mutableStateOf(
@@ -243,12 +200,6 @@ fun MainDashboardScreen() {
             if (event == Lifecycle.Event.ON_RESUME) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                     hasOverlayPermission = Settings.canDrawOverlays(context)
-                }
-            } else if (event == Lifecycle.Event.ON_STOP || event == Lifecycle.Event.ON_PAUSE) {
-                if (autoBackupEnabled && driveAccount != null && targetFile.exists()) {
-                    coroutineScope.launch {
-                        GoogleDriveBackupManager.uploadBackupToDrive(context, targetFile)
-                    }
                 }
             }
         }
@@ -1227,6 +1178,33 @@ fun MainDashboardScreen() {
                         lineHeight = 14.sp
                     )
 
+                    if (!com.example.data.VaultPathProvider.hasAllFilesAccess()) {
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = Color(0xFFFFF3E0)
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(10.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = "⚠️ Izin \"Semua Akses File\" belum diberikan. Tanpa ini, pet masih membaca/menulis di folder privat app, bukan Download/Obsidian.",
+                                    fontSize = 10.sp,
+                                    color = Color(0xFFE65100)
+                                )
+                                Button(
+                                    onClick = { com.example.data.VaultPathProvider.requestAllFilesAccess(context) },
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9800))
+                                ) {
+                                    Text("Aktifkan Akses ke Download/Obsidian", fontSize = 11.sp)
+                                }
+                            }
+                        }
+                    }
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -1470,225 +1448,6 @@ fun MainDashboardScreen() {
                 }
             }
 
-            // Google Drive Auto-Backup Card
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = Color(0xFFE3F2FD) // Light Blue Google Drive Theme
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Surface(
-                                shape = CircleShape,
-                                color = Color(0xFF1976D2).copy(alpha = 0.2f),
-                                modifier = Modifier.size(36.dp)
-                            ) {
-                                Text(
-                                    text = "☁️",
-                                    fontSize = 18.sp,
-                                    modifier = Modifier.padding(6.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column {
-                                Text(
-                                    text = "Google Drive Cloud Backup",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 15.sp,
-                                    color = Color(0xFF0D47A1)
-                                )
-                                Text(
-                                    text = "Backup & Overwrite pet_progress.md",
-                                    fontSize = 11.sp,
-                                    color = Color(0xFF1565C0)
-                                )
-                            }
-                        }
-
-                        Surface(
-                            shape = CircleShape,
-                            color = if (driveAccount != null) Color(0xFF4CAF50).copy(alpha = 0.2f) else Color(0xFFFF9800).copy(alpha = 0.2f)
-                        ) {
-                            Text(
-                                text = if (driveAccount != null) "✓ Terhubung" else "Belum Terhubung",
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (driveAccount != null) Color(0xFF2E7D32) else Color(0xFFE65100)
-                            )
-                        }
-                    }
-
-                    // Account Status Row & Sign In Button
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = Color.White,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(12.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "Akun Google:",
-                                    fontSize = 10.sp,
-                                    color = Color.Gray
-                                )
-                                Text(
-                                    text = driveAccount?.email ?: "Belum Login Google",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF1A237E)
-                                )
-                            }
-
-                            if (driveAccount == null) {
-                                Button(
-                                    onClick = {
-                                        val gso = GoogleDriveBackupManager.getGoogleSignInOptions()
-                                        val client = com.google.android.gms.auth.api.signin.GoogleSignIn.getClient(context, gso)
-                                        googleSignInLauncher.launch(client.signInIntent)
-                                    },
-                                    shape = RoundedCornerShape(12.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2))
-                                ) {
-                                    Text("Login Drive", fontSize = 11.sp)
-                                }
-                            } else {
-                                OutlinedButton(
-                                    onClick = {
-                                        val gso = GoogleDriveBackupManager.getGoogleSignInOptions()
-                                        val client = com.google.android.gms.auth.api.signin.GoogleSignIn.getClient(context, gso)
-                                        client.signOut()
-                                        driveAccount = null
-                                        driveBackupStatusMsg = "Sudah keluar dari Akun Google Drive."
-                                    },
-                                    shape = RoundedCornerShape(12.dp)
-                                ) {
-                                    Text("Logout", fontSize = 11.sp)
-                                }
-                            }
-                        }
-                    }
-
-                    // Auto Backup Switch (Midnight & App Exit)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Auto-Backup Jam 12 Malam & Tutup App",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF0D47A1)
-                            )
-                            Text(
-                                text = "Unggah & menimpa file pet_progress.md di Drive secara latar belakang",
-                                fontSize = 10.sp,
-                                color = Color(0xFF1565C0)
-                            )
-                        }
-
-                        Switch(
-                            checked = autoBackupEnabled,
-                            onCheckedChange = { enabled ->
-                                autoBackupEnabled = enabled
-                                if (enabled) {
-                                    GoogleDriveBackupWorker.scheduleMidnightBackup(context)
-                                    Toast.makeText(context, "Auto-Backup Aktif!", Toast.LENGTH_SHORT).show()
-                                } else {
-                                    androidx.work.WorkManager.getInstance(context)
-                                        .cancelUniqueWork(GoogleDriveBackupWorker.WORK_NAME)
-                                    Toast.makeText(context, "Auto-Backup Dinonaktifkan.", Toast.LENGTH_SHORT).show()
-                                }
-                            }
-                        )
-                    }
-
-                    // Manual Backup Action
-                    Button(
-                        onClick = {
-                            uploadBackupToDrive()
-                        },
-                        enabled = !isUploadingToDrive,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0D47A1))
-                    ) {
-                        Text(
-                            text = if (isUploadingToDrive) "Sedang Mengunggah..." else "⚡ Upload / Overwrite Sekarang",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-
-                    if (driveBackupStatusMsg.isNotBlank()) {
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = Color(0xFFBBDEFB),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(
-                                text = driveBackupStatusMsg,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = Color(0xFF0D47A1),
-                                modifier = Modifier.padding(10.dp)
-                            )
-                        }
-                    }
-
-                    // Configuration Steps for Google Cloud / Firebase Console
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = Color.White,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Text(
-                                text = "📌 Langkah Konfigurasi Google Cloud / Firebase Console:",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF0D47A1)
-                            )
-                            Text(
-                                text = "1. Buka Google Cloud Console (console.cloud.google.com)\n" +
-                                        "2. Aktifkan API 'Google Drive API' pada project Anda.\n" +
-                                        "3. Di menu Credentials > OAuth 2.0 Client ID (Android):\n" +
-                                        "   • Package Name: com.example\n" +
-                                        "   • SHA-1 Fingerprint: masukkan fingerprint debug/release APK.\n" +
-                                        "4. Tambahkan Scope OAuth:\n" +
-                                        "   • https://www.googleapis.com/auth/drive.file\n" +
-                                        "   • https://www.googleapis.com/auth/drive.appdata\n" +
-                                        "5. Unduh google-services.json jika menggunakan Firebase Console.",
-                                fontSize = 10.sp,
-                                color = Color(0xFF37474F),
-                                lineHeight = 14.sp
-                            )
-                        }
-                    }
-                }
-            }
         }
     }
 }
