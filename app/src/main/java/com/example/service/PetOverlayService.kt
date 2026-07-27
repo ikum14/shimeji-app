@@ -124,6 +124,25 @@ class PetOverlayService : Service() {
         syncToObsidian()
     }
 
+    /**
+     * Minta Gemini bikin kalimat celotehan baru berdasarkan biodata.md & status pet saat ini.
+     * Kalimat template (PetQuotes) tetap tampil dulu sebagai placeholder instan,
+     * lalu ditimpa begitu balasan AI datang (butuh beberapa detik, ada koneksi internet).
+     */
+    private fun requestSmartDialog() {
+        if (!com.example.data.GeminiPetBrain.isConfigured()) return
+        serviceScope.launch {
+            val memory = com.example.data.ObsidianMemoryManager.userMemory.value
+            val reply = com.example.data.GeminiPetBrain.generateDialog(
+                userName = memory.userName,
+                userHobby = memory.userHobby,
+                petLevel = petLevel,
+                petEmotion = petEmotion
+            )
+            speechText?.text = reply
+        }
+    }
+
     private fun startIdleEmotionTimer() {
         idleTimerJob?.cancel()
         idleTimerJob = serviceScope.launch {
@@ -350,6 +369,7 @@ class PetOverlayService : Service() {
                             handleUserInteraction(5)
                             behaviorState = PetBehaviorState.IDLE
                             behaviorTicksRemaining = 0
+                            requestSmartDialog()
                         } else {
                             // Released after drag -> Trigger Stair-fall physics!
                             handleUserInteraction(2)
@@ -501,7 +521,7 @@ class PetOverlayService : Service() {
             if (!isDragging && p.y >= screenHeight) {
                 p.y = screenHeight
                 try {
-                    windowManager.updateViewLayout(overlayView, p)
+                    windowMannager.updateViewLayout(overlayView, p)
                 } catch (e: Exception) {
                     // Ignore
                 }
