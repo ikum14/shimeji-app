@@ -30,15 +30,19 @@ object ObsidianMemoryManager {
     val userMemory = _userMemory.asStateFlow()
 
     /**
-     * Target `biodata.md` file in Obsidian Documents directory
+     * Target `biodata.md` file di shared Obsidian vault (Download/Obsidian).
+     * Jatuh balik ke folder privat app kalau izin "All files access" belum diberikan.
      */
     fun getBiodataFile(context: Context): File {
-        val docsDir = context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS)
-            ?: context.filesDir
-        if (!docsDir.exists()) {
-            docsDir.mkdirs()
+        val vaultDir = if (VaultPathProvider.hasAllFilesAccess()) {
+            VaultPathProvider.getObsidianVaultDir()
+        } else {
+            context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS) ?: context.filesDir
         }
-        return File(docsDir, BIODATA_FILE_NAME)
+        if (!vaultDir.exists()) {
+            vaultDir.mkdirs()
+        }
+        return File(vaultDir, BIODATA_FILE_NAME)
     }
 
     /**

@@ -34,15 +34,20 @@ object ObsidianPetExporter {
     private const val FILE_NAME = "pet_progress.md"
 
     /**
-     * Gets the file destination in Android Local External Files / Documents directory.
+     * Gets the file destination in the shared Obsidian vault (Download/Obsidian).
+     * Jatuh balik ke folder privat app kalau izin "All files access" belum diberikan,
+     * supaya app tidak crash meski belum sempat setting izin.
      */
     fun getTargetMarkdownFile(context: Context): File {
-        val docsDir = context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS)
-            ?: context.filesDir
-        if (!docsDir.exists()) {
-            docsDir.mkdirs()
+        val vaultDir = if (VaultPathProvider.hasAllFilesAccess()) {
+            VaultPathProvider.getObsidianVaultDir()
+        } else {
+            context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS) ?: context.filesDir
         }
-        return File(docsDir, FILE_NAME)
+        if (!vaultDir.exists()) {
+            vaultDir.mkdirs()
+        }
+        return File(vaultDir, FILE_NAME)
     }
 
     /**
