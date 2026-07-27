@@ -29,11 +29,18 @@ jobs:
       with:
         gradle-version: '9.3.1'
 
-    - name: Generate debug keystore
+    - name: Write .env from secret
+      run: echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" > .env
+
+    - name: Generate debug keystore (only if not committed)
       run: |
-        keytool -genkey -v -keystore debug.keystore -storepass android \
-          -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 \
-          -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+        if [ ! -f debug.keystore ]; then
+          keytool -genkey -v -keystore debug.keystore -storepass android \
+            -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 \
+            -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+        else
+          echo "debug.keystore already exists in repo, skipping generation."
+        fi
 
     - name: Build debug APK
       run: gradle assembleDebug --stacktrace
@@ -52,3 +59,4 @@ jobs:
       with:
         name: build-logs
         path: app/build/outputs
+        
