@@ -58,9 +58,9 @@ class PetOverlayService : Service() {
     private var behaviorTicksRemaining = 0
 
     // Leveling & Emotion Timer States for Overlay Pet (Timestamp based for Doze Mode safety)
-    private var petLevel = 5
-    private var petXp = 75
-    private val maxXp = 100
+    private var petLevel = 1
+    private var petXp = 0
+    private val maxXp = com.example.data.PetProgressStore.MAX_XP_PER_LEVEL
     private var petEmotion = "Senang" // "Senang", "Bosan", "Kesal"
     private var lastInteractionTimestamp = System.currentTimeMillis()
 
@@ -76,12 +76,20 @@ class PetOverlayService : Service() {
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         startForegroundServiceNotification()
         createFloatingPetOverlay()
+        petLevel = com.example.data.PetProgressStore.getLevel(applicationContext)
+        petXp = com.example.data.PetProgressStore.getXp(applicationContext)
         listenForNotificationBus()
         listenForPetDataBus()
         startIdleEmotionTimer()
         // Autonomous walk/climb dimatikan atas request user — pet diam di tempat, tetap bisa di-drag manual.
         // startAutonomousBehaviorLoop()
         com.example.data.TtsSpeaker.init(applicationContext)
+        updatePetSprite(held = false) // Terapkan kostum tersimpan begitu overlay muncul
+        serviceScope.launch {
+            com.example.model.CostumeManager.kostumAktif.collect {
+                updatePetSprite(held = false) // Update langsung tiap kostum diganti dari dashboard
+            }
+        }
     }
 
     private fun syncToObsidian() {
@@ -124,6 +132,14 @@ class PetOverlayService : Service() {
             android.widget.Toast.makeText(this, "🎉 LEVEL UP! Pet menjadi Level $petLevel!", android.widget.Toast.LENGTH_SHORT).show()
         }
         syncToObsidian()
+        com.example.data.PetProgressStore.save(applicationContext, petLevel, petXp)
+        // Broadcast juga ke dashboard biar kalau lagi dibuka bareng, langsung update tanpa perlu buka-tutup app
+        com.example.model.PetDataBus.shareData(
+            level = petLevel,
+            xp = petXp,
+            emotion = petEmotion,
+            speechMessage = speechText?.text?.toString() ?: ""
+        )
     }
 
     /**
@@ -179,13 +195,42 @@ class PetOverlayService : Service() {
         }
     }
 
+    private fun resolveLocalCostumeDrawable(costumeId: String, held: Boolean): Int {
+        return when (costumeId) {
+            "baju_sekolah" -> R.drawable.img_costume_school
+            "gaun_pesta" -> R.drawable.img_costume_dress
+            "piyama" -> R.drawable.img_costume_pajamas
+            else -> if (held) R.drawable.img_chibi_pet_held else R.drawable.img_chibi_pet_idle
+        }
+    }
+
+    /** Selalu panggil ini (bukan setImageResource langsung) supaya kostum aktif ke-apply dengan benar. */
+    private fun updatePetSprite(held: Boolean) {
+        val iv = petImage ?: return
+        val rawCostumeId = com.example.model.CostumeManager.kostumAktif.value
+        val effectiveId = com.example.model.CostumeManager.getEffectiveCostumeUrlOrId(rawCostumeId, petLevel)
+
+        if (effectiveId.startsWith("http") || effectiveId.contains("/")) {
+            // Kostum kustom dari galeri HP atau URL -> load pakai Coil
+            val loader = coil.ImageLoader(applicationContext)
+            val request = coil.request.ImageRequest.Builder(applicationContext)
+                .data(effectiveId)
+                .target(iv)
+                .crossfade(true)
+                .build()
+            loader.enqueue(request)
+        } else {
+            iv.setImageResource(resolveLocalCostumeDrawable(effectiveId, held))
+        }
+    }
+
     private fun listenForNotificationBus() {
         serviceScope.launch {
             NotificationBus.notifications.collect { incoming ->
                 if (!isPetHidden) {
                     speechCard?.visibility = View.VISIBLE
                     speechText?.text = incoming.toSpeechBubbleText()
-                    petImage?.setImageResource(R.drawable.img_chibi_pet_idle)
+                    updatePetSprite(held = false)
 
                     when (com.example.data.NotificationVoiceSettings.getMode(applicationContext)) {
                         com.example.data.VoiceReadMode.OFF -> { /* diam, tidak bersuara */ }
@@ -355,7 +400,7 @@ class PetOverlayService : Service() {
                         initialTouchX = event.rawX
                         initialTouchY = event.rawY
 
-                        petImage?.setImageResource(R.drawable.img_chibi_pet_held)
+                        updatePetSprite(held = true)
                         speechText?.text = PetQuotes.dragQuotes.random()
                         return true
                     }
@@ -378,7 +423,7 @@ class PetOverlayService : Service() {
 
                         if (duration < 200 && deltaX < 15 && deltaY < 15) {
                             // Pet Tapped
-                            petImage?.setImageResource(R.drawable.img_chibi_pet_idle)
+                            updatePetSprite(held = false)
                             speechText?.text = PetQuotes.tapQuotes.random()
                             handleUserInteraction(5)
                             behaviorState = PetBehaviorState.IDLE
@@ -386,7 +431,7 @@ class PetOverlayService : Service() {
                             requestSmartDialog()
                         } else {
                             // Released after drag -> tetap diam di titik itu (nggak jatuh lagi, atas request Master)
-                            petImage?.setImageResource(R.drawable.img_chibi_pet_idle)
+                            updatePetSprite(held = false)
                             handleUserInteraction(2)
                             behaviorState = PetBehaviorState.IDLE
                             behaviorTicksRemaining = 0
@@ -508,7 +553,7 @@ class PetOverlayService : Service() {
         fallingJob?.cancel()
         fallingJob = serviceScope.launch {
             isFalling = true
-            petImage?.setImageResource(R.drawable.img_chibi_pet_held)
+            updatePetSprite(held = true)
             speechText?.text = PetQuotes.fallQuotes.random()
 
             var stepCount = 0
@@ -540,7 +585,7 @@ class PetOverlayService : Service() {
                     // Ignore
                 }
                 isFalling = false
-                petImage?.setImageResource(R.drawable.img_chibi_pet_idle)
+                updatePetSprite(held = false)
                 speechText?.text = "Sampai di bawah! ✨"
             }
         }
