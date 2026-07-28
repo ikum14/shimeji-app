@@ -2,9 +2,11 @@ package com.example.service
 
 import android.app.Notification
 import android.content.Intent
+import android.content.SharedPreferences
 import android.os.Bundle
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
+import com.example.data.TtsSpeaker
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 
@@ -68,6 +70,11 @@ class PetNotificationListenerService : NotificationListenerService() {
         val extras: Bundle = sbnNotNull.notification.extras ?: return
         val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
         val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
+
+        // Lewati notifikasi yang bukan dari app chat target, dan lewati group-summary
+        // (WhatsApp/Telegram sering kirim 1 notifikasi "ringkasan" tanpa isi pesan asli)
+        val isGroupSummary = (sbnNotNull.notification.flags and Notification.FLAG_GROUP_SUMMARY) != 0
+        if (!isTargetApp || isGroupSummary) return
 
         if (text.isNotBlank()) {
             val appLabel = when {
