@@ -264,6 +264,8 @@ class PetOverlayService : Service() {
             setBackgroundResource(android.R.drawable.dialog_holo_light_frame)
             setPadding(28, 18, 28, 18)
             elevation = 12f
+            maxWidth = (230 * resources.displayMetrics.density).toInt()
+            setLineSpacing(6f, 1.1f)
         }
         speechText = speechCard as TextView
 
