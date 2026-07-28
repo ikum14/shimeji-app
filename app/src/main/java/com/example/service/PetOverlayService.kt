@@ -259,10 +259,10 @@ class PetOverlayService : Service() {
         // Speech Bubble View
         speechCard = TextView(this).apply {
             text = "Halo Master! Seret aku ke atas ya~"
-            textSize = 20f
+            textSize = 17f
             setTextColor(0xFF333333.toInt())
             setBackgroundResource(android.R.drawable.dialog_holo_light_frame)
-            setPadding(28, 18, 28, 18)
+            setPadding(26, 16, 26, 16)
             elevation = 12f
             maxWidth = (230 * resources.displayMetrics.density).toInt()
             setLineSpacing(6f, 1.1f)
@@ -385,11 +385,10 @@ class PetOverlayService : Service() {
                             behaviorTicksRemaining = 0
                             requestSmartDialog()
                         } else {
-                            // Released after drag -> Trigger Stair-fall physics!
+                            // Released after drag -> tetap diam di titik itu (nggak jatuh lagi, atas request Master)
                             handleUserInteraction(2)
                             behaviorState = PetBehaviorState.IDLE
                             behaviorTicksRemaining = 0
-                            startStairFallPhysics()
                         }
                         return true
                     }
