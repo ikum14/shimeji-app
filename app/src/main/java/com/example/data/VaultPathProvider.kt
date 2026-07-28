@@ -17,12 +17,13 @@ import java.io.File
  */
 object VaultPathProvider {
 
-    /** Ganti "Obsidian" di sini kalau nama folder vault kamu berbeda. */
+    /** Ganti ini kalau nama folder vault Obsidian kamu berbeda. */
     private const val VAULT_FOLDER_NAME = "Obsidian"
+    private const val APP_SUBFOLDER_NAME = "pet-virtual"
 
     fun getObsidianVaultDir(): File {
         val downloadDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-        val vaultDir = File(downloadDir, VAULT_FOLDER_NAME)
+        val vaultDir = File(File(downloadDir, VAULT_FOLDER_NAME), APP_SUBFOLDER_NAME)
         if (!vaultDir.exists()) {
             vaultDir.mkdirs()
         }
