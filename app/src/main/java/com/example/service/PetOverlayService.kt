@@ -386,6 +386,7 @@ class PetOverlayService : Service() {
                             requestSmartDialog()
                         } else {
                             // Released after drag -> tetap diam di titik itu (nggak jatuh lagi, atas request Master)
+                            petImage?.setImageResource(R.drawable.img_chibi_pet_idle)
                             handleUserInteraction(2)
                             behaviorState = PetBehaviorState.IDLE
                             behaviorTicksRemaining = 0
