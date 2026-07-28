@@ -79,7 +79,9 @@ class PetOverlayService : Service() {
         listenForNotificationBus()
         listenForPetDataBus()
         startIdleEmotionTimer()
-        startAutonomousBehaviorLoop()
+        // Autonomous walk/climb dimatikan atas request user — pet diam di tempat, tetap bisa di-drag manual.
+        // startAutonomousBehaviorLoop()
+        com.example.data.TtsSpeaker.init(applicationContext)
     }
 
     private fun syncToObsidian() {
@@ -184,7 +186,17 @@ class PetOverlayService : Service() {
                     speechCard?.visibility = View.VISIBLE
                     speechText?.text = incoming.toSpeechBubbleText()
                     petImage?.setImageResource(R.drawable.img_chibi_pet_idle)
-                    
+
+                    when (com.example.data.NotificationVoiceSettings.getMode(applicationContext)) {
+                        com.example.data.VoiceReadMode.OFF -> { /* diam, tidak bersuara */ }
+                        com.example.data.VoiceReadMode.SENDER_ONLY -> {
+                            com.example.data.TtsSpeaker.speak("Pesan masuk dari ${incoming.senderName}")
+                        }
+                        com.example.data.VoiceReadMode.FULL_MESSAGE -> {
+                            com.example.data.TtsSpeaker.speak("Pesan dari ${incoming.senderName}: ${incoming.messageText}")
+                        }
+                    }
+
                     // Share incoming notification data across overlay & main app
                     com.example.model.PetDataBus.shareData(
                         level = petLevel,
@@ -247,10 +259,10 @@ class PetOverlayService : Service() {
         // Speech Bubble View
         speechCard = TextView(this).apply {
             text = "Halo Master! Seret aku ke atas ya~"
-            textSize = 11f
+            textSize = 20f
             setTextColor(0xFF333333.toInt())
             setBackgroundResource(android.R.drawable.dialog_holo_light_frame)
-            setPadding(16, 8, 16, 8)
+            setPadding(28, 18, 28, 18)
             elevation = 12f
         }
         speechText = speechCard as TextView
@@ -553,6 +565,7 @@ class PetOverlayService : Service() {
         fallingJob?.cancel()
         idleTimerJob?.cancel()
         behaviorJob?.cancel()
+        com.example.data.TtsSpeaker.shutdown()
         overlayView?.let {
             try {
                 windowManager.removeView(it)
