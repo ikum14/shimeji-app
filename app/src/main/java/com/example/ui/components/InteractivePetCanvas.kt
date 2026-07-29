@@ -127,13 +127,21 @@ fun InteractivePetCanvas(
         val kostumAktif by CostumeManager.kostumAktif.collectAsState()
 
         // Leveling & Emotion Timer States (Timestamp based for Doze Mode safety)
-        var petLevel by remember { mutableIntStateOf(5) }
-        var petXp by remember { mutableIntStateOf(75) }
-        val maxXp = 100
+        var petLevel by remember { mutableIntStateOf(com.example.data.PetProgressStore.getLevel(LocalContext.current)) }
+        var petXp by remember { mutableIntStateOf(com.example.data.PetProgressStore.getXp(LocalContext.current)) }
+        val maxXp = com.example.data.PetProgressStore.MAX_XP_PER_LEVEL
         var petEmotion by remember { mutableStateOf("Senang") } // "Senang", "Bosan", "Kesal"
         var lastInteractionTimestamp by remember { mutableLongStateOf(System.currentTimeMillis()) }
         var idleSeconds by remember { mutableIntStateOf(0) }
         val context = LocalContext.current
+
+        // Dengerin update live dari overlay pet / dashboard biar nggak nyimpen angka basi sendiri
+        LaunchedEffect(Unit) {
+            com.example.model.PetDataBus.syncFlow.collect { sync ->
+                petLevel = sync.petLevel
+                petXp = sync.petXp
+            }
+        }
 
         // Helper to save data automatically to Obsidian & share data with floating overlay window
         fun syncToObsidian() {
@@ -152,6 +160,7 @@ fun InteractivePetCanvas(
                     totalInteractions = heartsCount
                 )
                 com.example.data.ObsidianPetExporter.saveProgressToFile(context, data)
+                com.example.data.PetProgressStore.save(context, petLevel, petXp)
 
                 // Share data live with Overlay Window (FlutterOverlayWindow.shareData equivalent)
                 com.example.model.PetDataBus.shareData(
@@ -347,9 +356,9 @@ fun InteractivePetCanvas(
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         val (badgeText, badgeColor) = when {
-                            petLevel <= 10 -> "🌱 Anak Lvl $petLevel" to Color(0xFFE91E63)
-                            petLevel in 11..18 -> "✨ Dewasa Lvl $petLevel" to Color(0xFF673AB7)
-                            else -> "💖 Tsundere Lvl $petLevel" to Color(0xFFFF1744)
+                            petLevel <= 10 -> "🌱 Anak Lvl $petLevel" to Color(0xFF636363)
+                            petLevel in 11..18 -> "✨ Dewasa Lvl $petLevel" to Color(0xFF565656)
+                            else -> "💖 Tsundere Lvl $petLevel" to Color(0xFF616161)
                         }
 
                         Surface(
@@ -366,9 +375,9 @@ fun InteractivePetCanvas(
                         }
 
                         val (emotionColor, emotionIcon) = when (petEmotion) {
-                            "Bosan" -> Color(0xFFFF9800) to "🥱 Bosan"
-                            "Kesal" -> Color(0xFFF44336) to "😤 Kesal"
-                            else -> Color(0xFF4CAF50) to "😄 Senang"
+                            "Bosan" -> Color(0xFFA5A5A5) to "🥱 Bosan"
+                            "Kesal" -> Color(0xFF767676) to "😤 Kesal"
+                            else -> Color(0xFF878787) to "😄 Senang"
                         }
 
                         Surface(
@@ -386,9 +395,9 @@ fun InteractivePetCanvas(
 
                         // Battery status pill badge
                         val (battColor, battText) = when {
-                            batteryStateInfo.isCharging -> Color(0xFF00E676) to "⚡ ${batteryStateInfo.batteryLevel}%"
-                            batteryStateInfo.isLowBattery -> Color(0xFFFF5252) to "🪫 ${batteryStateInfo.batteryLevel}%"
-                            else -> Color(0xFF00BCD4) to "🔋 ${batteryStateInfo.batteryLevel}%"
+                            batteryStateInfo.isCharging -> Color(0xFF949494) to "⚡ ${batteryStateInfo.batteryLevel}%"
+                            batteryStateInfo.isLowBattery -> Color(0xFF868686) to "🪫 ${batteryStateInfo.batteryLevel}%"
+                            else -> Color(0xFF878787) to "🔋 ${batteryStateInfo.batteryLevel}%"
                         }
 
                         Surface(
@@ -419,7 +428,7 @@ fun InteractivePetCanvas(
                                 .fillMaxWidth()
                                 .height(5.dp)
                                 .clip(CircleShape),
-                            color = Color(0xFF9C27B0)
+                            color = Color(0xFF5A5A5A)
                         )
                     }
                 }
@@ -449,7 +458,7 @@ fun InteractivePetCanvas(
                             onHidePetClicked?.invoke()
                         },
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = if (isHidden) MaterialTheme.colorScheme.primary else Color(0xFFE91E63)
+                            containerColor = if (isHidden) MaterialTheme.colorScheme.primary else Color(0xFF636363)
                         ),
                         shape = CircleShape
                     ) {
@@ -534,9 +543,9 @@ fun InteractivePetCanvas(
                 ) {
                     // Speech Bubble over Pet head
                     speechBubble?.let { text ->
-                        val bubbleBg = if (petLevel > 18) Color(0xFFFFF0F5) else Color.White
-                        val bubbleText = if (petLevel > 18) Color(0xFF880E4F) else Color(0xFF333333)
-                        val bubbleBorderStroke = if (petLevel > 18) androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFFFF4081)) else null
+                        val bubbleBg = if (petLevel > 18) Color(0xFFF5F5F5) else Color.White
+                        val bubbleText = if (petLevel > 18) Color(0xFF3A3A3A) else Color(0xFF333333)
+                        val bubbleBorderStroke = if (petLevel > 18) androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFF818181)) else null
 
                         Card(
                             modifier = Modifier
@@ -572,7 +581,7 @@ fun InteractivePetCanvas(
                             Icon(
                                 imageVector = Icons.Default.Favorite,
                                 contentDescription = "Heart",
-                                tint = Color(0xFFFF4081),
+                                tint = Color(0xFF818181),
                                 modifier = Modifier.size(18.dp)
                             )
                             Spacer(modifier = Modifier.width(2.dp))
@@ -580,7 +589,7 @@ fun InteractivePetCanvas(
                                 text = "+$heartsCount",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFFFF4081)
+                                color = Color(0xFF818181)
                             )
                         }
                     }
@@ -589,7 +598,7 @@ fun InteractivePetCanvas(
                     if (batteryStateInfo.isCharging) {
                         Surface(
                             shape = CircleShape,
-                            color = Color(0xFFFFD54F),
+                            color = Color(0xFFD2D2D2),
                             shadowElevation = 6.dp,
                             modifier = Modifier.padding(bottom = 4.dp)
                         ) {
@@ -608,7 +617,7 @@ fun InteractivePetCanvas(
                     } else if (batteryStateInfo.isLowBattery) {
                         Surface(
                             shape = CircleShape,
-                            color = Color(0xFFFF5252),
+                            color = Color(0xFF868686),
                             shadowElevation = 6.dp,
                             modifier = Modifier.padding(bottom = 4.dp)
                         ) {
@@ -627,7 +636,7 @@ fun InteractivePetCanvas(
                     } else if (petLevel > 18) {
                         Surface(
                             shape = CircleShape,
-                            color = Color(0xFFFF4081),
+                            color = Color(0xFF818181),
                             shadowElevation = 6.dp,
                             modifier = Modifier.padding(bottom = 4.dp)
                         ) {
@@ -772,13 +781,13 @@ fun InteractivePetCanvas(
                                     modifier = Modifier
                                         .size(20.dp)
                                         .clip(CircleShape)
-                                        .background(Color(0xFFFF4081).copy(alpha = 0.55f))
+                                        .background(Color(0xFF818181).copy(alpha = 0.55f))
                                 )
                                 Box(
                                     modifier = Modifier
                                         .size(20.dp)
                                         .clip(CircleShape)
-                                        .background(Color(0xFFFF4081).copy(alpha = 0.55f))
+                                        .background(Color(0xFF818181).copy(alpha = 0.55f))
                                 )
                             }
                         }

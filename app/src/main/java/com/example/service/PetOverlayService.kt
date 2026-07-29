@@ -205,6 +205,34 @@ class PetOverlayService : Service() {
         }
     }
 
+    /** Geser window masuk lagi kalau bubble yang baru resize bikin dia nabrak/nongol keluar tepi layar. */
+    private fun clampWindowToScreen() {
+        val p = params ?: return
+        val ov = overlayView ?: return
+        val displayMetrics = resources.displayMetrics
+        val screenWidth = displayMetrics.widthPixels
+        val windowWidth = ov.width
+        if (windowWidth <= 0) return
+
+        val maxX = (screenWidth - windowWidth).coerceAtLeast(0)
+        var changed = false
+        if (p.x > maxX) {
+            p.x = maxX
+            changed = true
+        }
+        if (p.x < 0) {
+            p.x = 0
+            changed = true
+        }
+        if (changed) {
+            try {
+                windowManager.updateViewLayout(overlayView, p)
+            } catch (e: Exception) {
+                // Overlay lagi nggak siap/service berhenti, abaikan
+            }
+        }
+    }
+
     private fun resolveLocalCostumeDrawable(costumeId: String, held: Boolean): Int {
         return when (costumeId) {
             "baju_sekolah" -> R.drawable.img_costume_school
@@ -323,6 +351,11 @@ class PetOverlayService : Service() {
             setLineSpacing(6f, 1.1f)
         }
         speechText = speechCard as TextView
+        speechCard?.addOnLayoutChangeListener { _, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
+            if ((right - left) != (oldRight - oldLeft) || (bottom - top) != (oldBottom - oldTop)) {
+                clampWindowToScreen()
+            }
+        }
 
         // Pet Image View
         petImage = ImageView(this).apply {
