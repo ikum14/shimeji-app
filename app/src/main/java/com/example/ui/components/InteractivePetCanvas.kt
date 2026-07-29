@@ -127,13 +127,13 @@ fun InteractivePetCanvas(
         val kostumAktif by CostumeManager.kostumAktif.collectAsState()
 
         // Leveling & Emotion Timer States (Timestamp based for Doze Mode safety)
-        var petLevel by remember { mutableIntStateOf(com.example.data.PetProgressStore.getLevel(LocalContext.current)) }
-        var petXp by remember { mutableIntStateOf(com.example.data.PetProgressStore.getXp(LocalContext.current)) }
+        val context = LocalContext.current
+        var petLevel by remember { mutableIntStateOf(com.example.data.PetProgressStore.getLevel(context)) }
+        var petXp by remember { mutableIntStateOf(com.example.data.PetProgressStore.getXp(context)) }
         val maxXp = com.example.data.PetProgressStore.MAX_XP_PER_LEVEL
         var petEmotion by remember { mutableStateOf("Senang") } // "Senang", "Bosan", "Kesal"
         var lastInteractionTimestamp by remember { mutableLongStateOf(System.currentTimeMillis()) }
         var idleSeconds by remember { mutableIntStateOf(0) }
-        val context = LocalContext.current
 
         // Dengerin update live dari overlay pet / dashboard biar nggak nyimpen angka basi sendiri
         LaunchedEffect(Unit) {
