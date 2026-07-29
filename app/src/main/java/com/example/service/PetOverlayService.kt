@@ -20,6 +20,27 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.app.NotificationCompat
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LifecycleRegistry
+import androidx.lifecycle.setViewTreeLifecycleOwner
+import androidx.savedstate.SavedStateRegistry
+import androidx.savedstate.SavedStateRegistryController
+import androidx.savedstate.SavedStateRegistryOwner
+import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.example.MainActivity
 import com.example.R
 import com.example.model.PetQuotes
@@ -32,14 +53,20 @@ import kotlin.math.abs
 
 private enum class PetBehaviorState { IDLE, WALK_LEFT, WALK_RIGHT, CLIMB_UP, CLIMB_DOWN }
 
-class PetOverlayService : Service() {
+class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
+
+    private val lifecycleRegistry = LifecycleRegistry(this)
+    private val savedStateRegistryController = SavedStateRegistryController.create(this)
+    override val lifecycle: Lifecycle get() = lifecycleRegistry
+    override val savedStateRegistry: SavedStateRegistry get() = savedStateRegistryController.savedStateRegistry
+    private val speechBubbleTextState = mutableStateOf("Halo Master! Seret aku ke atas ya~")
+
 
     private lateinit var windowManager: WindowManager
     private var overlayView: View? = null
     private var params: WindowManager.LayoutParams? = null
 
     private var petImage: ImageView? = null
-    private var speechText: TextView? = null
     private var speechCard: View? = null
     private var hideButton: TextView? = null
     private var showButtonPill: View? = null
@@ -73,6 +100,10 @@ class PetOverlayService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        savedStateRegistryController.performRestore(null)
+        lifecycleRegistry.currentState = Lifecycle.State.CREATED
+        lifecycleRegistry.currentState = Lifecycle.State.STARTED
+        lifecycleRegistry.currentState = Lifecycle.State.RESUMED
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         startForegroundServiceNotification()
         createFloatingPetOverlay()
@@ -124,7 +155,7 @@ class PetOverlayService : Service() {
                 level = petLevel,
                 xp = petXp,
                 emotion = petEmotion,
-                speechMessage = speechText?.text?.toString() ?: ""
+                speechMessage = speechBubbleTextState.value
             )
         } catch (e: Exception) {
             e.printStackTrace()
@@ -138,7 +169,7 @@ class PetOverlayService : Service() {
         if (petXp >= maxXp) {
             petLevel++
             petXp %= maxXp
-            speechText?.text = "🎉 LEVEL UP! Sekarang Level $petLevel!"
+            setSpeechBubbleText("🎉 LEVEL UP! Sekarang Level $petLevel!")
             android.widget.Toast.makeText(this, "🎉 LEVEL UP! Pet menjadi Level $petLevel!", android.widget.Toast.LENGTH_SHORT).show()
         }
         syncToObsidian()
@@ -148,7 +179,7 @@ class PetOverlayService : Service() {
             level = petLevel,
             xp = petXp,
             emotion = petEmotion,
-            speechMessage = speechText?.text?.toString() ?: ""
+            speechMessage = speechBubbleTextState.value
         )
     }
 
@@ -167,7 +198,7 @@ class PetOverlayService : Service() {
                 petLevel = petLevel,
                 petEmotion = petEmotion
             )
-            speechText?.text = reply
+            setSpeechBubbleText(reply)
         }
     }
 
@@ -180,11 +211,11 @@ class PetOverlayService : Service() {
                     val elapsedSeconds = ((System.currentTimeMillis() - lastInteractionTimestamp) / 1000).toInt()
                     if (elapsedSeconds >= 20 && petEmotion != "Kesal") {
                         petEmotion = "Kesal"
-                        speechText?.text = PetQuotes.kesalQuotes.random()
+                        setSpeechBubbleText(PetQuotes.kesalQuotes.random())
                         syncToObsidian()
                     } else if (elapsedSeconds >= 10 && petEmotion == "Senang") {
                         petEmotion = "Bosan"
-                        speechText?.text = PetQuotes.boredQuotes.random()
+                        setSpeechBubbleText(PetQuotes.boredQuotes.random())
                         syncToObsidian()
                     }
                 }
@@ -199,13 +230,18 @@ class PetOverlayService : Service() {
                 petXp = syncData.petXp
                 if (syncData.speechMessage.isNotEmpty() && !isPetHidden) {
                     speechCard?.visibility = View.VISIBLE
-                    speechText?.text = syncData.speechMessage
+                    setSpeechBubbleText(syncData.speechMessage)
                 }
             }
         }
     }
 
-    /** Geser window masuk lagi kalau bubble yang baru resize bikin dia nabrak/nongol keluar tepi layar. */
+    /** Selalu panggil ini (bukan set TextView langsung) -- update state Compose, resize window ditangani otomatis. */
+    private fun setSpeechBubbleText(text: String) {
+        speechBubbleTextState.value = text
+    }
+
+    /** Paksa window resize ulang tiap konten (misal teks bubble) berubah ukuran, sekalian jaga posisi biar nggak nabrak tepi layar. */
     private fun clampWindowToScreen() {
         val p = params ?: return
         val ov = overlayView ?: return
@@ -218,29 +254,17 @@ class PetOverlayService : Service() {
 
         val maxX = (screenWidth - windowWidth).coerceAtLeast(0)
         val maxY = (screenHeight - windowHeight).coerceAtLeast(0)
-        var changed = false
-        if (p.x > maxX) {
-            p.x = maxX
-            changed = true
-        }
-        if (p.x < 0) {
-            p.x = 0
-            changed = true
-        }
-        if (p.y > maxY) {
-            p.y = maxY
-            changed = true
-        }
-        if (p.y < 0) {
-            p.y = 0
-            changed = true
-        }
-        if (changed) {
-            try {
-                windowManager.updateViewLayout(overlayView, p)
-            } catch (e: Exception) {
-                // Overlay lagi nggak siap/service berhenti, abaikan
-            }
+        if (p.x > maxX) p.x = maxX
+        if (p.x < 0) p.x = 0
+        if (p.y > maxY) p.y = maxY
+        if (p.y < 0) p.y = 0
+
+        // Selalu update (bukan cuma pas posisi berubah) -- window WRAP_CONTENT nggak auto resize
+        // sendiri tiap konten berubah ukuran, harus dipaksa lewat updateViewLayout tiap saat.
+        try {
+            windowManager.updateViewLayout(overlayView, p)
+        } catch (e: Exception) {
+            // Overlay lagi nggak siap/service berhenti, abaikan
         }
     }
 
@@ -278,7 +302,7 @@ class PetOverlayService : Service() {
             NotificationBus.notifications.collect { incoming ->
                 if (!isPetHidden) {
                     speechCard?.visibility = View.VISIBLE
-                    speechText?.text = incoming.toSpeechBubbleText()
+                    setSpeechBubbleText(incoming.toSpeechBubbleText())
                     updatePetSprite(held = false)
 
                     when (com.example.data.NotificationVoiceSettings.getMode(applicationContext)) {
@@ -350,21 +374,27 @@ class PetOverlayService : Service() {
             gravity = Gravity.CENTER_HORIZONTAL
         }
 
-        // Speech Bubble View
-        speechCard = TextView(this).apply {
-            text = "Halo Master! Seret aku ke atas ya~"
-            textSize = 17f
-            setTextColor(0xFF333333.toInt())
-            setBackgroundResource(android.R.drawable.dialog_holo_light_frame)
-            setPadding(26, 16, 26, 16)
-            elevation = 12f
-            maxWidth = (230 * resources.displayMetrics.density).toInt()
-            setLineSpacing(6f, 1.1f)
-        }
-        speechText = speechCard as TextView
-        speechCard?.addOnLayoutChangeListener { _, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
-            if ((right - left) != (oldRight - oldLeft) || (bottom - top) != (oldBottom - oldTop)) {
-                clampWindowToScreen()
+        // Speech Bubble View — pakai Compose (sama kayak Interactive Sandbox Playground)
+        // supaya resize-nya ditangani otomatis, bukan manual kayak TextView biasa.
+        speechCard = ComposeView(this).apply {
+            setViewTreeLifecycleOwner(this@PetOverlayService)
+            setViewTreeSavedStateRegistryOwner(this@PetOverlayService)
+            setContent {
+                val text by remember { speechBubbleTextState }
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = Color.White,
+                    shadowElevation = 6.dp
+                ) {
+                    Text(
+                        text = text,
+                        fontSize = 17.sp,
+                        color = Color(0xFF333333),
+                        modifier = Modifier
+                            .widthIn(max = 230.dp)
+                            .padding(horizontal = 16.dp, vertical = 10.dp)
+                    )
+                }
             }
         }
 
@@ -455,7 +485,7 @@ class PetOverlayService : Service() {
                         initialTouchY = event.rawY
 
                         updatePetSprite(held = true)
-                        speechText?.text = PetQuotes.dragQuotes.random()
+                        setSpeechBubbleText(PetQuotes.dragQuotes.random())
                         return true
                     }
 
@@ -478,7 +508,7 @@ class PetOverlayService : Service() {
                         if (duration < 200 && deltaX < 15 && deltaY < 15) {
                             // Pet Tapped
                             updatePetSprite(held = false)
-                            speechText?.text = PetQuotes.tapQuotes.random()
+                            setSpeechBubbleText(PetQuotes.tapQuotes.random())
                             handleUserInteraction(5)
                             behaviorState = PetBehaviorState.IDLE
                             behaviorTicksRemaining = 0
@@ -552,7 +582,7 @@ class PetOverlayService : Service() {
                 if (p.x <= 0) {
                     behaviorState = PetBehaviorState.CLIMB_UP
                     behaviorTicksRemaining = 0
-                    speechText?.text = "Manjat ah~ 🧗"
+                    setSpeechBubbleText("Manjat ah~ 🧗")
                 }
             }
             PetBehaviorState.WALK_RIGHT -> {
@@ -561,7 +591,7 @@ class PetOverlayService : Service() {
                 if (p.x >= rightEdgeX) {
                     behaviorState = PetBehaviorState.CLIMB_UP
                     behaviorTicksRemaining = 0
-                    speechText?.text = "Manjat ah~ 🧗"
+                    setSpeechBubbleText("Manjat ah~ 🧗")
                 }
             }
             PetBehaviorState.CLIMB_UP -> {
@@ -571,7 +601,7 @@ class PetOverlayService : Service() {
                     if ((0..2).random() == 0) {
                         behaviorState = PetBehaviorState.CLIMB_DOWN
                         behaviorTicksRemaining = 0
-                        speechText?.text = "Turun lagi ah~"
+                        setSpeechBubbleText("Turun lagi ah~")
                     } else {
                         decideNextBehavior()
                     }
@@ -608,7 +638,7 @@ class PetOverlayService : Service() {
         fallingJob = serviceScope.launch {
             isFalling = true
             updatePetSprite(held = true)
-            speechText?.text = PetQuotes.fallQuotes.random()
+            setSpeechBubbleText(PetQuotes.fallQuotes.random())
 
             var stepCount = 0
             val stepHeightPx = 22
@@ -640,7 +670,7 @@ class PetOverlayService : Service() {
                 }
                 isFalling = false
                 updatePetSprite(held = false)
-                speechText?.text = "Sampai di bawah! ✨"
+                setSpeechBubbleText("Sampai di bawah! ✨")
             }
         }
     }
@@ -657,7 +687,7 @@ class PetOverlayService : Service() {
             petImage?.visibility = View.VISIBLE
             hideButton?.visibility = View.VISIBLE
             showButtonPill?.visibility = View.GONE
-            speechText?.text = "Halo lagi, Master!"
+            setSpeechBubbleText("Halo lagi, Master!")
         }
     }
 
@@ -674,6 +704,7 @@ class PetOverlayService : Service() {
                 e.printStackTrace()
             }
         }
+        lifecycleRegistry.currentState = Lifecycle.State.DESTROYED
     }
 
     companion object {
