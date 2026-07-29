@@ -211,10 +211,13 @@ class PetOverlayService : Service() {
         val ov = overlayView ?: return
         val displayMetrics = resources.displayMetrics
         val screenWidth = displayMetrics.widthPixels
+        val screenHeight = displayMetrics.heightPixels
         val windowWidth = ov.width
-        if (windowWidth <= 0) return
+        val windowHeight = ov.height
+        if (windowWidth <= 0 || windowHeight <= 0) return
 
         val maxX = (screenWidth - windowWidth).coerceAtLeast(0)
+        val maxY = (screenHeight - windowHeight).coerceAtLeast(0)
         var changed = false
         if (p.x > maxX) {
             p.x = maxX
@@ -222,6 +225,14 @@ class PetOverlayService : Service() {
         }
         if (p.x < 0) {
             p.x = 0
+            changed = true
+        }
+        if (p.y > maxY) {
+            p.y = maxY
+            changed = true
+        }
+        if (p.y < 0) {
+            p.y = 0
             changed = true
         }
         if (changed) {
