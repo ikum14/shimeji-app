@@ -367,6 +367,8 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         
         // Dynamically build layout or construct FrameLayout
         val rootLayout = FrameLayout(this)
+        rootLayout.setViewTreeLifecycleOwner(this@PetOverlayService)
+        rootLayout.setViewTreeSavedStateRegistryOwner(this@PetOverlayService)
         
         // Container Layout
         val petContainer = LinearLayout(this).apply {
