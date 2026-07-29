@@ -888,6 +888,12 @@ fun MainDashboardScreen() {
                                 }
                                 savePetProgressToMarkdown()
                                 com.example.data.PetProgressStore.save(context, petLevel, petXp)
+                                com.example.model.PetDataBus.shareData(
+                                    level = petLevel,
+                                    xp = petXp,
+                                    emotion = "Senang",
+                                    speechMessage = "Makasih udah dielus, Master~"
+                                )
                             },
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(12.dp)

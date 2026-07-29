@@ -90,6 +90,16 @@ class PetOverlayService : Service() {
                 updatePetSprite(held = false) // Update langsung tiap kostum diganti dari dashboard
             }
         }
+        serviceScope.launch {
+            com.example.model.PetDataBus.syncFlow.collect { sync ->
+                // Serap update dari dashboard (misal tombol "Elus Pet") biar overlay nggak nyimpen angka basi
+                if (sync.petLevel != petLevel || sync.petXp != petXp) {
+                    petLevel = sync.petLevel
+                    petXp = sync.petXp
+                    updatePetSprite(held = false)
+                }
+            }
+        }
     }
 
     private fun syncToObsidian() {
