@@ -20,14 +20,20 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.app.NotificationCompat
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
@@ -104,6 +110,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         lifecycleRegistry.currentState = Lifecycle.State.CREATED
         lifecycleRegistry.currentState = Lifecycle.State.STARTED
         lifecycleRegistry.currentState = Lifecycle.State.RESUMED
+        com.example.data.BubbleSettings.init(applicationContext)
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         startForegroundServiceNotification()
         createFloatingPetOverlay()
@@ -236,9 +243,15 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         }
     }
 
-    /** Selalu panggil ini (bukan set TextView langsung) -- update state Compose, resize window ditangani otomatis. */
+    /** Selalu panggil ini (bukan set TextView langsung) -- update state Compose, lalu paksa window luar resize. */
     private fun setSpeechBubbleText(text: String) {
         speechBubbleTextState.value = text
+        // Compose butuh 1 frame buat recompose+relayout dulu sebelum window WindowManager
+        // di luar dipaksa resize -- makanya dikasih delay kecil, bukan langsung.
+        serviceScope.launch {
+            delay(50)
+            clampWindowToScreen()
+        }
     }
 
     /** Paksa window resize ulang tiap konten (misal teks bubble) berubah ukuran, sekalian jaga posisi biar nggak nabrak tepi layar. */
@@ -376,26 +389,34 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             gravity = Gravity.CENTER_HORIZONTAL
         }
 
-        // Speech Bubble View — pakai Compose (sama kayak Interactive Sandbox Playground)
-        // supaya resize-nya ditangani otomatis, bukan manual kayak TextView biasa.
+        // Speech Bubble View — pakai Compose, ukuran TETAP dari awal (bukan WRAP_CONTENT dinamis)
+        // supaya window WindowManager di luar nggak pernah perlu resize ulang sama sekali.
         speechCard = ComposeView(this).apply {
             setViewTreeLifecycleOwner(this@PetOverlayService)
             setViewTreeSavedStateRegistryOwner(this@PetOverlayService)
             setContent {
                 val text by remember { speechBubbleTextState }
+                val fontSizeSp by com.example.data.BubbleSettings.fontSizeSp.collectAsState()
                 Surface(
                     shape = RoundedCornerShape(16.dp),
                     color = Color.White,
-                    shadowElevation = 6.dp
+                    shadowElevation = 6.dp,
+                    modifier = Modifier
+                        .width(230.dp)
+                        .heightIn(min = 56.dp, max = 110.dp)
                 ) {
-                    Text(
-                        text = text,
-                        fontSize = 17.sp,
-                        color = Color(0xFF333333),
+                    Box(
                         modifier = Modifier
-                            .widthIn(max = 230.dp)
-                            .padding(horizontal = 16.dp, vertical = 10.dp)
-                    )
+                            .padding(horizontal = 14.dp, vertical = 8.dp)
+                            .verticalScroll(rememberScrollState()),
+                        contentAlignment = Alignment.CenterStart
+                    ) {
+                        Text(
+                            text = text,
+                            fontSize = fontSizeSp.sp,
+                            color = Color(0xFF333333)
+                        )
+                    }
                 }
             }
         }
