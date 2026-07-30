@@ -160,7 +160,6 @@ fun MainDashboardScreen() {
     var voiceMode by remember { mutableStateOf(com.example.data.NotificationVoiceSettings.getMode(context)) }
     com.example.data.BubbleSettings.init(context)
     var bubbleFontSize by remember { mutableFloatStateOf(com.example.data.BubbleSettings.fontSizeSp.value) }
-    var bubbleFontSizeSp by remember { mutableFloatStateOf(com.example.data.BubbleTextSettings.getFontSizeSp(context)) }
     var availableVoices by remember { mutableStateOf<List<android.speech.tts.Voice>>(emptyList()) }
     var selectedVoiceName by remember { mutableStateOf(com.example.data.NotificationVoiceSettings.getSelectedVoiceName(context)) }
 
@@ -1236,52 +1235,6 @@ fun MainDashboardScreen() {
                             }
                         }
                     }
-                }
-            }
-
-            // 💬 Ukuran Teks Bubble Pet
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF263238)),
-                elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "💬 Ukuran Teks Bubble Pet",
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                        Text(
-                            text = "${bubbleFontSizeSp.toInt()}sp",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF80CBC4)
-                        )
-                    }
-                    Slider(
-                        value = bubbleFontSizeSp,
-                        onValueChange = {
-                            bubbleFontSizeSp = it
-                            com.example.data.BubbleTextSettings.setFontSizeSp(context, it)
-                        },
-                        valueRange = com.example.data.BubbleTextSettings.MIN_SIZE_SP..com.example.data.BubbleTextSettings.MAX_SIZE_SP,
-                        steps = (com.example.data.BubbleTextSettings.MAX_SIZE_SP - com.example.data.BubbleTextSettings.MIN_SIZE_SP).toInt() - 1
-                    )
-                    Text(
-                        text = "Contoh: \"Halo Master! Seret aku ke atas ya~\"",
-                        fontSize = bubbleFontSizeSp.sp,
-                        color = Color(0xFFB0BEC5)
-                    )
                 }
             }
 
