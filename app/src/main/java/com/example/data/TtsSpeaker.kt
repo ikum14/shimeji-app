@@ -40,6 +40,19 @@ object TtsSpeaker {
                         }
                     }
                 }
+                // DEBUG SEMENTARA: konfirmasi engine TTS beneran siap.
+                android.widget.Toast.makeText(
+                    context.applicationContext,
+                    "🔊 TTS engine siap (lang result=$result)",
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
+            } else {
+                // DEBUG SEMENTARA: kalau ini yang muncul, berarti TTS engine GAGAL init dari awal.
+                android.widget.Toast.makeText(
+                    context.applicationContext,
+                    "⚠️ TTS engine GAGAL init (status=$status)",
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
             }
         }
     }
@@ -68,8 +81,27 @@ object TtsSpeaker {
     }
 
     fun speak(text: String) {
-        if (!isReady || text.isBlank()) return
-        tts?.speak(text, TextToSpeech.QUEUE_ADD, null, System.currentTimeMillis().toString())
+        if (!isReady || text.isBlank()) {
+            // DEBUG SEMENTARA: kalau ini muncul pas tap pet, berarti speak() KEPANGGIL
+            // tapi engine-nya belum siap -- itu penyebab kenapa gak ada suara.
+            pendingContext?.let { ctx ->
+                android.widget.Toast.makeText(
+                    ctx,
+                    "⚠️ speak() dipanggil tapi isReady=$isReady",
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+            }
+            return
+        }
+        val result = tts?.speak(text, TextToSpeech.QUEUE_ADD, null, System.currentTimeMillis().toString())
+        // DEBUG SEMENTARA: konfirmasi speak() beneran dipanggil & hasil returnnya.
+        pendingContext?.let { ctx ->
+            android.widget.Toast.makeText(
+                ctx,
+                "🗣️ speak() jalan, hasil=$result",
+                android.widget.Toast.LENGTH_SHORT
+            ).show()
+        }
     }
 
     /** Coba baca 1 kalimat contoh pakai suara yang lagi aktif, buat preview di UI. */
