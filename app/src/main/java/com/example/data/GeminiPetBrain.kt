@@ -25,7 +25,7 @@ import java.util.concurrent.TimeUnit
 object GeminiPetBrain {
 
     private const val TAG = "GeminiPetBrain"
-    private const val MODEL = "gemini-3.5-flash"
+    private const val MODEL = "gemini-2.5-flash-lite"
     private const val ENDPOINT =
         "https://generativelanguage.googleapis.com/v1beta/models/$MODEL:generateContent"
 
@@ -85,9 +85,11 @@ object GeminiPetBrain {
                 val bodyString = response.body?.string().orEmpty()
                 if (!response.isSuccessful) {
                     Log.e(TAG, "Gemini API error ${response.code}: $bodyString")
-                    // Sementara ditampilin detail errornya di bubble biar bisa didebug
-                    // tanpa akses logcat (Termux non-root gak bisa baca log app lain).
-                    return@withContext "Error ${response.code}: ${bodyString.take(120)}"
+                    return@withContext if (response.code == 429) {
+                        "Kuota AI-ku abis buat hari ini, Master~ 😴 (coba lagi nanti ya)"
+                    } else {
+                        "Aduh, otak AI-ku lagi error, Master~ 😵"
+                    }
                 }
                 val text = JSONObject(bodyString)
                     .optJSONArray("candidates")
@@ -101,10 +103,10 @@ object GeminiPetBrain {
             }
         } catch (e: IOException) {
             Log.e(TAG, "Gagal hubungi Gemini API (jaringan)", e)
-            "Error jaringan: ${e.message?.take(120)}"
+            "Koneksi ke otak AI-ku gagal, Master~ 📡"
         } catch (e: Exception) {
             Log.e(TAG, "Error generate dialog", e)
-            "Error: ${e.javaClass.simpleName} - ${e.message?.take(100)}"
+            "Ups, ada yang salah pas aku mikir~ 🤔"
         }
     }
 

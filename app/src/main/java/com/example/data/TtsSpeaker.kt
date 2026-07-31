@@ -1,14 +1,22 @@
 package com.example.data
 
 import android.content.Context
+import android.media.AudioManager
+import android.os.Bundle
 import android.speech.tts.TextToSpeech
 import android.speech.tts.Voice
 import java.util.Locale
 
 /**
  * Singleton pembungkus TextToSpeech Android, dipakai buat baca notifikasi
- * masuk secara suara. Dibuat singleton supaya engine TTS cuma di-init sekali
- * (bukan tiap ada notifikasi baru), dan bisa dipanggil dari Service manapun.
+ * masuk secara suara & celotehan pet sendiri. Dibuat singleton supaya engine TTS
+ * cuma di-init sekali (bukan tiap ada notifikasi baru), dan bisa dipanggil dari
+ * Service manapun.
+ *
+ * Suara diarahin paksa ke STREAM_NOTIFICATION (bukan STREAM_MUSIC default) supaya
+ * TETAP keluar dari speaker HP walau ada headset Bluetooth (A2DP) yang lagi konek --
+ * profil A2DP Bluetooth cuma nangkep STREAM_MUSIC, jadi stream lain kayak
+ * notification/alarm biasanya tetap lewat speaker internal HP.
  *
  * Suara yang dipakai adalah suara yang SUDAH TERINSTALL di HP (dari Google TTS
  * atau engine TTS lain yang terpasang) — bukan suara custom/rekaman sendiri.
@@ -40,19 +48,6 @@ object TtsSpeaker {
                         }
                     }
                 }
-                // DEBUG SEMENTARA: konfirmasi engine TTS beneran siap.
-                android.widget.Toast.makeText(
-                    context.applicationContext,
-                    "🔊 TTS engine siap (lang result=$result)",
-                    android.widget.Toast.LENGTH_LONG
-                ).show()
-            } else {
-                // DEBUG SEMENTARA: kalau ini yang muncul, berarti TTS engine GAGAL init dari awal.
-                android.widget.Toast.makeText(
-                    context.applicationContext,
-                    "⚠️ TTS engine GAGAL init (status=$status)",
-                    android.widget.Toast.LENGTH_LONG
-                ).show()
             }
         }
     }
@@ -81,27 +76,14 @@ object TtsSpeaker {
     }
 
     fun speak(text: String) {
-        if (!isReady || text.isBlank()) {
-            // DEBUG SEMENTARA: kalau ini muncul pas tap pet, berarti speak() KEPANGGIL
-            // tapi engine-nya belum siap -- itu penyebab kenapa gak ada suara.
-            pendingContext?.let { ctx ->
-                android.widget.Toast.makeText(
-                    ctx,
-                    "⚠️ speak() dipanggil tapi isReady=$isReady",
-                    android.widget.Toast.LENGTH_SHORT
-                ).show()
-            }
-            return
+        if (!isReady || text.isBlank()) return
+        val ctx = pendingContext
+        if (ctx != null && PetVoiceSettings.isMuted(ctx)) return // Master lagi mute-in suara pet
+
+        val params = Bundle().apply {
+            putInt(TextToSpeech.Engine.KEY_PARAM_STREAM, AudioManager.STREAM_NOTIFICATION)
         }
-        val result = tts?.speak(text, TextToSpeech.QUEUE_ADD, null, System.currentTimeMillis().toString())
-        // DEBUG SEMENTARA: konfirmasi speak() beneran dipanggil & hasil returnnya.
-        pendingContext?.let { ctx ->
-            android.widget.Toast.makeText(
-                ctx,
-                "🗣️ speak() jalan, hasil=$result",
-                android.widget.Toast.LENGTH_SHORT
-            ).show()
-        }
+        tts?.speak(text, TextToSpeech.QUEUE_ADD, params, System.currentTimeMillis().toString())
     }
 
     /** Coba baca 1 kalimat contoh pakai suara yang lagi aktif, buat preview di UI. */

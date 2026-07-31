@@ -91,7 +91,15 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
     /** Waktu terakhir berhasil kirim request ke Gemini, buat cooldown biar gak boros kuota. */
     private var lastSmartDialogRequestTime = 0L
-    private val SMART_DIALOG_COOLDOWN_MS = 15_000L // 15 detik jarak minimal antar request AI
+    private val SMART_DIALOG_COOLDOWN_MS = 60_000L // 1 menit jarak minimal antar request AI
+
+    /** Waktu terakhir pet ngoceh pakai kalimat template (gratis, gak manggil API). */
+    private var lastIdleChatterTime = 0L
+    private val IDLE_CHATTER_INTERVAL_MS = 10_000L // pet ganti kalimat tiap 10 detik
+
+    /** Jendela waktu: Gemini cuma boleh dipanggil otomatis kalau pet DISENTUH dalam X ms terakhir. */
+    private val RECENT_INTERACTION_WINDOW_MS = 60_000L // 1 menit
+
     private var behaviorTicksRemaining = 0
 
     // Leveling & Emotion Timer States for Overlay Pet (Timestamp based for Doze Mode safety)
@@ -180,7 +188,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         if (petXp >= maxXp) {
             petLevel++
             petXp %= maxXp
-            setSpeechBubbleText("🎉 LEVEL UP! Sekarang Level $petLevel!")
+            speakBubble("🎉 LEVEL UP! Sekarang Level $petLevel!")
             android.widget.Toast.makeText(this, "🎉 LEVEL UP! Pet menjadi Level $petLevel!", android.widget.Toast.LENGTH_SHORT).show()
         }
         syncToObsidian()
@@ -199,8 +207,9 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
      * lain di vault pet-virtual + status pet saat ini. Semua file dibaca ULANG dari disk
      * tiap kali fungsi ini jalan (real-time) — bukan dari cache lama — supaya perubahan
      * terbaru yang kamu tulis di Obsidian langsung kepakai tanpa perlu buka dashboard dulu.
-     * Ada cooldown 15 detik antar request biar tap berkali-kali cepat gak langsung
-     * ngabisin kuota API (lihat SMART_DIALOG_COOLDOWN_MS).
+     * Dipanggil dari 2 tempat: (1) tap langsung ke pet, (2) idle chatter timer kalau pet
+     * baru aja disentuh. Ada cooldown 1 menit antar request biar kuota API gak cepet abis
+     * (lihat SMART_DIALOG_COOLDOWN_MS).
      * Kalimat template (PetQuotes) tetap tampil dulu sebagai placeholder instan,
      * lalu ditimpa begitu balasan AI datang (butuh beberapa detik, ada koneksi internet).
      */
@@ -223,25 +232,48 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                 petEmotion = petEmotion,
                 vaultContext = vaultContext
             )
-            setSpeechBubbleText(reply)
+            speakBubble(reply)
         }
     }
 
+    /**
+     * Idle timer yang udah ada dari awal (jalan tiap 3 detik): urus perubahan mood
+     * (Bosan/Kesal) DAN sekarang juga urus "ngoceh berkala":
+     * - Tiap IDLE_CHATTER_INTERVAL_MS (10 detik): pet SELALU ngomong sesuatu, gratis,
+     *   pakai kalimat template (PetQuotes) -- gak nunggu network, gak manggil API.
+     * - Tapi KALAU pet baru aja disentuh dalam RECENT_INTERACTION_WINDOW_MS (1 menit)
+     *   terakhir DAN cooldown Gemini (SMART_DIALOG_COOLDOWN_MS, 1 menit) udah lewat,
+     *   tick ini juga sekalian minta kalimat "pintar" dari Gemini (async, nimpa bubble
+     *   begitu balasannya datang). Kalau pet dibiarin lama tanpa disentuh, gak ada
+     *   request Gemini otomatis sama sekali -- kuota aman.
+     */
     private fun startIdleEmotionTimer() {
         idleTimerJob?.cancel()
         idleTimerJob = serviceScope.launch {
             while (true) {
                 delay(3000L)
                 if (!isDragging && !isFalling && !isPetHidden) {
-                    val elapsedSeconds = ((System.currentTimeMillis() - lastInteractionTimestamp) / 1000).toInt()
+                    val now = System.currentTimeMillis()
+                    val elapsedSeconds = ((now - lastInteractionTimestamp) / 1000).toInt()
                     if (elapsedSeconds >= 20 && petEmotion != "Kesal") {
                         petEmotion = "Kesal"
-                        setSpeechBubbleText(PetQuotes.kesalQuotes.random())
+                        speakBubble(PetQuotes.kesalQuotes.random())
                         syncToObsidian()
                     } else if (elapsedSeconds >= 10 && petEmotion == "Senang") {
                         petEmotion = "Bosan"
-                        setSpeechBubbleText(PetQuotes.boredQuotes.random())
+                        speakBubble(PetQuotes.boredQuotes.random())
                         syncToObsidian()
+                    }
+
+                    if (now - lastIdleChatterTime >= IDLE_CHATTER_INTERVAL_MS) {
+                        lastIdleChatterTime = now
+                        val recentlyTouched = now - lastInteractionTimestamp <= RECENT_INTERACTION_WINDOW_MS
+                        val geminiCooldownPassed = now - lastSmartDialogRequestTime >= SMART_DIALOG_COOLDOWN_MS
+                        if (recentlyTouched && geminiCooldownPassed && com.example.data.GeminiPetBrain.isConfigured()) {
+                            requestSmartDialog()
+                        } else {
+                            speakBubble(PetQuotes.tapQuotes.random())
+                        }
                     }
                 }
             }
@@ -255,20 +287,36 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                 petXp = syncData.petXp
                 if (syncData.speechMessage.isNotEmpty() && !isPetHidden) {
                     speechCard?.visibility = View.VISIBLE
-                    setSpeechBubbleText(syncData.speechMessage)
+                    speakBubble(syncData.speechMessage)
                 }
             }
         }
     }
 
     /** Selalu panggil ini (bukan set TextView langsung) -- update state Compose, lalu paksa window luar resize. */
-    private fun setSpeechBubbleText(text: String) {
+    /** Update teks bubble doang, TANPA suara — dipakai kalau TTS-nya mau diatur manual sendiri (misal notifikasi WA/Telegram, yang teksnya beda dari yang dibacain). */
+    private fun updateBubbleUi(text: String) {
         speechBubbleTextState.value = text
         // Compose butuh 1 frame buat recompose+relayout dulu sebelum window WindowManager
         // di luar dipaksa resize -- makanya dikasih delay kecil, bukan langsung.
         serviceScope.launch {
             delay(50)
             clampWindowToScreen()
+        }
+    }
+
+    /** Cegah TTS ngomong dobel buat kalimat yang sama gara-gara PetDataBus (overlay dengerin balik broadcast dari dirinya sendiri). */
+    private var lastSpokenText: String? = null
+    private var lastSpokenAt: Long = 0L
+
+    /** Update teks bubble SEKALIGUS dibacain lewat TTS, pakai suara yang sudah dipilih Master di Settings. Ini yang dipakai di semua celotehan pet (tap, level up, mood, AI reply, dll). */
+    private fun speakBubble(text: String) {
+        updateBubbleUi(text)
+        val now = System.currentTimeMillis()
+        if (text != lastSpokenText || now - lastSpokenAt > 3000L) {
+            com.example.data.TtsSpeaker.speak(text)
+            lastSpokenText = text
+            lastSpokenAt = now
         }
     }
 
@@ -333,7 +381,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             NotificationBus.notifications.collect { incoming ->
                 if (!isPetHidden) {
                     speechCard?.visibility = View.VISIBLE
-                    setSpeechBubbleText(incoming.toSpeechBubbleText())
+                    updateBubbleUi(incoming.toSpeechBubbleText())
                     updatePetSprite(held = false)
 
                     when (com.example.data.NotificationVoiceSettings.getMode(applicationContext)) {
@@ -526,7 +574,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                         initialTouchY = event.rawY
 
                         updatePetSprite(held = true)
-                        setSpeechBubbleText(PetQuotes.dragQuotes.random())
+                        speakBubble(PetQuotes.dragQuotes.random())
                         return true
                     }
 
@@ -549,7 +597,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                         if (duration < 200 && deltaX < 15 && deltaY < 15) {
                             // Pet Tapped
                             updatePetSprite(held = false)
-                            setSpeechBubbleText(PetQuotes.tapQuotes.random())
+                            speakBubble(PetQuotes.tapQuotes.random())
                             handleUserInteraction(5)
                             behaviorState = PetBehaviorState.IDLE
                             behaviorTicksRemaining = 0
@@ -623,7 +671,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                 if (p.x <= 0) {
                     behaviorState = PetBehaviorState.CLIMB_UP
                     behaviorTicksRemaining = 0
-                    setSpeechBubbleText("Manjat ah~ 🧗")
+                    speakBubble("Manjat ah~ 🧗")
                 }
             }
             PetBehaviorState.WALK_RIGHT -> {
@@ -632,7 +680,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                 if (p.x >= rightEdgeX) {
                     behaviorState = PetBehaviorState.CLIMB_UP
                     behaviorTicksRemaining = 0
-                    setSpeechBubbleText("Manjat ah~ 🧗")
+                    speakBubble("Manjat ah~ 🧗")
                 }
             }
             PetBehaviorState.CLIMB_UP -> {
@@ -642,7 +690,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                     if ((0..2).random() == 0) {
                         behaviorState = PetBehaviorState.CLIMB_DOWN
                         behaviorTicksRemaining = 0
-                        setSpeechBubbleText("Turun lagi ah~")
+                        speakBubble("Turun lagi ah~")
                     } else {
                         decideNextBehavior()
                     }
@@ -679,7 +727,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         fallingJob = serviceScope.launch {
             isFalling = true
             updatePetSprite(held = true)
-            setSpeechBubbleText(PetQuotes.fallQuotes.random())
+            speakBubble(PetQuotes.fallQuotes.random())
 
             var stepCount = 0
             val stepHeightPx = 22
@@ -711,7 +759,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                 }
                 isFalling = false
                 updatePetSprite(held = false)
-                setSpeechBubbleText("Sampai di bawah! ✨")
+                speakBubble("Sampai di bawah! ✨")
             }
         }
     }
@@ -728,7 +776,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             petImage?.visibility = View.VISIBLE
             hideButton?.visibility = View.VISIBLE
             showButtonPill?.visibility = View.GONE
-            setSpeechBubbleText("Halo lagi, Master!")
+            speakBubble("Halo lagi, Master!")
         }
     }
 

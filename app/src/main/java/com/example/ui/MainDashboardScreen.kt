@@ -158,6 +158,7 @@ fun MainDashboardScreen() {
     var isEditingBiodata by remember { mutableStateOf(false) }
     var biodataInputText by remember { mutableStateOf("") }
     var voiceMode by remember { mutableStateOf(com.example.data.NotificationVoiceSettings.getMode(context)) }
+    var isPetVoiceMuted by remember { mutableStateOf(com.example.data.PetVoiceSettings.isMuted(context)) }
     com.example.data.BubbleSettings.init(context)
     var bubbleFontSize by remember { mutableFloatStateOf(com.example.data.BubbleSettings.fontSizeSp.value) }
     var availableVoices by remember { mutableStateOf<List<android.speech.tts.Voice>>(emptyList()) }
@@ -1255,6 +1256,39 @@ fun MainDashboardScreen() {
                         fontWeight = FontWeight.Bold,
                         color = Color.White
                     )
+
+                    // 🔇 Master mute -- matiin/nyalain SEMUA suara pet sekaligus
+                    // (dialog pet sendiri + notifikasi WA/Telegram), enak dipakai
+                    // pas lagi headset-an biar orang di sekitar gak ke-ganggu.
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFF1E1E1E), RoundedCornerShape(12.dp))
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = if (isPetVoiceMuted) "🔇 Suara Pet: Mati" else "🔈 Suara Pet: Nyala",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                            Text(
+                                text = "Matiin semua suara pet (ngobrol + notif), tanpa ganggu orang sekitar",
+                                fontSize = 11.sp,
+                                color = Color(0xFFB0BEC5)
+                            )
+                        }
+                        Switch(
+                            checked = !isPetVoiceMuted,
+                            onCheckedChange = { checkedOn ->
+                                isPetVoiceMuted = !checkedOn
+                                com.example.data.PetVoiceSettings.setMuted(context, isPetVoiceMuted)
+                            }
+                        )
+                    }
 
                     if (!com.example.data.NotificationVoiceSettings.hasNotificationAccess(context)) {
                         Surface(
