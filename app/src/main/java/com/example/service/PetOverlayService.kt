@@ -88,6 +88,10 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
     private var petSizePx = 0
     private var behaviorState = PetBehaviorState.IDLE
+
+    /** Waktu terakhir berhasil kirim request ke Gemini, buat cooldown biar gak boros kuota. */
+    private var lastSmartDialogRequestTime = 0L
+    private val SMART_DIALOG_COOLDOWN_MS = 15_000L // 15 detik jarak minimal antar request AI
     private var behaviorTicksRemaining = 0
 
     // Leveling & Emotion Timer States for Overlay Pet (Timestamp based for Doze Mode safety)
@@ -195,11 +199,20 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
      * lain di vault pet-virtual + status pet saat ini. Semua file dibaca ULANG dari disk
      * tiap kali fungsi ini jalan (real-time) — bukan dari cache lama — supaya perubahan
      * terbaru yang kamu tulis di Obsidian langsung kepakai tanpa perlu buka dashboard dulu.
+     * Ada cooldown 15 detik antar request biar tap berkali-kali cepat gak langsung
+     * ngabisin kuota API (lihat SMART_DIALOG_COOLDOWN_MS).
      * Kalimat template (PetQuotes) tetap tampil dulu sebagai placeholder instan,
      * lalu ditimpa begitu balasan AI datang (butuh beberapa detik, ada koneksi internet).
      */
     private fun requestSmartDialog() {
         if (!com.example.data.GeminiPetBrain.isConfigured()) return
+        val now = System.currentTimeMillis()
+        if (now - lastSmartDialogRequestTime < SMART_DIALOG_COOLDOWN_MS) {
+            // Masih dalam masa cooldown, biarin kalimat template dari tap-nya tetap tampil,
+            // gak usah nembak Gemini lagi biar kuota gak cepet abis.
+            return
+        }
+        lastSmartDialogRequestTime = now
         serviceScope.launch {
             val memory = com.example.data.ObsidianMemoryManager.loadMemoryFromObsidian(applicationContext)
             val vaultContext = com.example.data.ObsidianMemoryManager.readVaultContext(applicationContext)
