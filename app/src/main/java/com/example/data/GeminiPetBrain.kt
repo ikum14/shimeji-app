@@ -48,13 +48,14 @@ object GeminiPetBrain {
         userName: String,
         userHobby: String,
         petLevel: Int,
-        petEmotion: String
+        petEmotion: String,
+        vaultContext: String = ""
     ): String = withContext(Dispatchers.IO) {
         if (!isConfigured()) {
             return@withContext "Gemini API key belum terpasang, Master~"
         }
         try {
-            val prompt = buildPrompt(userName, userHobby, petLevel, petEmotion)
+            val prompt = buildPrompt(userName, userHobby, petLevel, petEmotion, vaultContext)
             val requestBodyJson = JSONObject().apply {
                 put(
                     "contents", JSONArray().put(
@@ -105,7 +106,24 @@ object GeminiPetBrain {
         }
     }
 
-    private fun buildPrompt(userName: String, userHobby: String, petLevel: Int, petEmotion: String): String {
+    private fun buildPrompt(
+        userName: String,
+        userHobby: String,
+        petLevel: Int,
+        petEmotion: String,
+        vaultContext: String
+    ): String {
+        val contextBlock = if (vaultContext.isNotBlank()) {
+            """
+
+            Catatan/pengetahuan tambahan dari vault Obsidian Master (isi file-file yang dia tulis).
+            Pakai ini KALAU relevan sama status/mood saat ini, jangan dibacain semua sekaligus:
+            ---
+            $vaultContext
+            ---
+            """.trimIndent()
+        } else ""
+
         return """
             Kamu adalah "Chibi Shimeji", pet virtual perempuan yang imut, ceria, dan sedikit manja,
             hidup sebagai karakter overlay di HP Android milik Master-nya.
@@ -114,6 +132,7 @@ object GeminiPetBrain {
 
             Data Master: Nama=$userName, Hobi=$userHobby
             Status pet saat ini: Level=$petLevel, Emosi=$petEmotion
+            $contextBlock
 
             Berikan 1 kalimat sapaan/celotehan yang cocok dengan status di atas.
         """.trimIndent()

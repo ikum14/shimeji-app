@@ -191,19 +191,24 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     }
 
     /**
-     * Minta Gemini bikin kalimat celotehan baru berdasarkan biodata.md & status pet saat ini.
+     * Minta Gemini bikin kalimat celotehan baru berdasarkan biodata.md + SEMUA file .md
+     * lain di vault pet-virtual + status pet saat ini. Semua file dibaca ULANG dari disk
+     * tiap kali fungsi ini jalan (real-time) — bukan dari cache lama — supaya perubahan
+     * terbaru yang kamu tulis di Obsidian langsung kepakai tanpa perlu buka dashboard dulu.
      * Kalimat template (PetQuotes) tetap tampil dulu sebagai placeholder instan,
      * lalu ditimpa begitu balasan AI datang (butuh beberapa detik, ada koneksi internet).
      */
     private fun requestSmartDialog() {
         if (!com.example.data.GeminiPetBrain.isConfigured()) return
         serviceScope.launch {
-            val memory = com.example.data.ObsidianMemoryManager.userMemory.value
+            val memory = com.example.data.ObsidianMemoryManager.loadMemoryFromObsidian(applicationContext)
+            val vaultContext = com.example.data.ObsidianMemoryManager.readVaultContext(applicationContext)
             val reply = com.example.data.GeminiPetBrain.generateDialog(
                 userName = memory.userName,
                 userHobby = memory.userHobby,
                 petLevel = petLevel,
-                petEmotion = petEmotion
+                petEmotion = petEmotion,
+                vaultContext = vaultContext
             )
             setSpeechBubbleText(reply)
         }

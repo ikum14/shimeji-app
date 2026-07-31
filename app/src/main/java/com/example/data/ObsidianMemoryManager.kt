@@ -30,7 +30,8 @@ object ObsidianMemoryManager {
     val userMemory = _userMemory.asStateFlow()
 
     /**
-     * Target `biodata.md` file di shared Obsidian vault (Download/Obsidian).
+     * Target `biodata.md` di dalam vault Obsidian master (Download/obsidian/pet-virtual),
+     * supaya nyambung ke biodata yang beneran kamu tulis & baca lewat app Obsidian.
      * Jatuh balik ke folder privat app kalau izin "All files access" belum diberikan.
      */
     fun getBiodataFile(context: Context): File {
@@ -113,6 +114,47 @@ object ObsidianMemoryManager {
         } catch (e: Exception) {
             Log.e(TAG, "Error loading memory from Obsidian markdown file", e)
             return _userMemory.value
+        }
+    }
+
+    /**
+     * Baca SEMUA file .md di folder vault pet-virtual (kecuali pet_progress.md, karena itu
+     * data teknis internal pet — bukan "pengetahuan" yang relevan buat AI), digabung jadi
+     * satu konteks teks buat "otak" pet.
+     *
+     * Dipanggil ulang setiap kali pet mau ngomong (real-time, TIDAK di-cache) supaya file
+     * baru/perubahan terbaru di Obsidian langsung kepakai tanpa perlu buka dashboard dulu.
+     */
+    fun readVaultContext(context: Context, maxChars: Int = 6000): String {
+        val vaultDir = if (VaultPathProvider.hasAllFilesAccess()) {
+            VaultPathProvider.getObsidianVaultDir()
+        } else {
+            context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS) ?: context.filesDir
+        }
+        if (!vaultDir.exists()) return ""
+
+        val mdFiles = vaultDir.listFiles { file ->
+            file.isFile && file.extension.equals("md", ignoreCase = true) && file.name != "pet_progress.md"
+        }?.sortedBy { it.name } ?: return ""
+
+        val builder = StringBuilder()
+        for (file in mdFiles) {
+            try {
+                val content = file.readText(Charsets.UTF_8).trim()
+                if (content.isBlank()) continue
+                builder.append("### ${file.name}\n")
+                builder.append(content)
+                builder.append("\n\n")
+            } catch (e: Exception) {
+                Log.e(TAG, "Gagal baca ${file.name} buat konteks vault", e)
+            }
+        }
+
+        val combined = builder.toString().trim()
+        return if (combined.length > maxChars) {
+            combined.take(maxChars) + "\n...(dipotong, isi vault kepanjangan)"
+        } else {
+            combined
         }
     }
 
