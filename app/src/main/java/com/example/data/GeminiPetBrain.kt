@@ -85,7 +85,9 @@ object GeminiPetBrain {
                 val bodyString = response.body?.string().orEmpty()
                 if (!response.isSuccessful) {
                     Log.e(TAG, "Gemini API error ${response.code}: $bodyString")
-                    return@withContext "Aduh, otak AI-ku lagi error, Master~ 😵"
+                    // Sementara ditampilin detail errornya di bubble biar bisa didebug
+                    // tanpa akses logcat (Termux non-root gak bisa baca log app lain).
+                    return@withContext "Error ${response.code}: ${bodyString.take(120)}"
                 }
                 val text = JSONObject(bodyString)
                     .optJSONArray("candidates")
@@ -99,10 +101,10 @@ object GeminiPetBrain {
             }
         } catch (e: IOException) {
             Log.e(TAG, "Gagal hubungi Gemini API (jaringan)", e)
-            "Koneksi ke otak AI-ku gagal, Master~ 📡"
+            "Error jaringan: ${e.message?.take(120)}"
         } catch (e: Exception) {
             Log.e(TAG, "Error generate dialog", e)
-            "Ups, ada yang salah pas aku mikir~ 🤔"
+            "Error: ${e.javaClass.simpleName} - ${e.message?.take(100)}"
         }
     }
 
