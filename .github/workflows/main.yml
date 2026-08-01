@@ -32,15 +32,8 @@ jobs:
     - name: Write .env from secret
       run: echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" > .env
 
-    - name: Generate debug keystore (only if not committed)
-      run: |
-        if [ ! -f debug.keystore ]; then
-          keytool -genkey -v -keystore debug.keystore -storepass android \
-            -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 \
-            -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
-        else
-          echo "debug.keystore already exists in repo, skipping generation."
-        fi
+    - name: Decode debug keystore dari secret (biar signature konsisten tiap build, gak perlu uninstall pas update)
+      run: echo "${{ secrets.DEBUG_KEYSTORE_BASE64 }}" | base64 -d > debug.keystore
 
     - name: Build debug APK
       run: gradle assembleDebug --stacktrace
