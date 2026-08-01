@@ -295,44 +295,6 @@ fun InteractivePetCanvas(
             }
         }
 
-        // Automatic Stair-Falling physics loop when drag releases
-        fun triggerStairFallPhysics() {
-            coroutineScope.launch {
-                isFalling = true
-                currentPose = PetPose.FALLING
-                speechBubble = PetQuotes.fallQuotes.random()
-
-                stairStepIndex = 0
-
-                while (petY < floorY && isFalling && !isDragging) {
-                    stairStepIndex++
-                    // Step down Y coordinate
-                    petY = (petY + stepHeightPx).coerceAtMost(floorY)
-
-                    // Stair-step horizontal sway physics (efek turun tangga / jatuh berayun)
-                    if (fallPhysicsMode == FallPhysicsMode.STAIR_STEP) {
-                        val horizontalShift = if (stairStepIndex % 2 == 0) stepWidthPx else -stepWidthPx
-                        petX = (petX + horizontalShift).coerceIn(0f, maxX)
-                    }
-
-                    delay(fallSpeedMs)
-                }
-
-                if (!isDragging && petY >= floorY) {
-                    petY = floorY
-                    isFalling = false
-                    currentPose = PetPose.HAPPY
-                    speechBubble = "Sampai di bawah! Nyaah~ ✨"
-
-                    // Temporary landing pose before idle
-                    delay(1200)
-                    if (!isDragging && !isFalling) {
-                        currentPose = PetPose.IDLE
-                    }
-                }
-            }
-        }
-
         // Floating Control Overlay (Top Left Level Badge & Top Right Hide/Show toggle button)
         Box(
             modifier = Modifier
@@ -684,12 +646,15 @@ fun InteractivePetCanvas(
                                     },
                                     onDragEnd = {
                                         isDragging = false
-                                        // Trigger Stair Fall gravity descent!
-                                        triggerStairFallPhysics()
+                                        currentPose = PetPose.IDLE
+                                        // Dulu ada trigger jatuh (Stair Fall) di sini, tapi fitur
+                                        // itu udah dimatiin di pet asli (overlay) -- preview ini
+                                        // sekarang disamain: pet cuma diem di posisi terakhir
+                                        // pas dilepas, gak jatuh otomatis.
                                     },
                                     onDragCancel = {
                                         isDragging = false
-                                        triggerStairFallPhysics()
+                                        currentPose = PetPose.IDLE
                                     },
                                     onDrag = { change, dragAmount ->
                                         change.consume()

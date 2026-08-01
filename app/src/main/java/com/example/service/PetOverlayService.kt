@@ -135,6 +135,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         // Autonomous walk/climb dimatikan atas request user — pet diam di tempat, tetap bisa di-drag manual.
         // startAutonomousBehaviorLoop()
         com.example.data.TtsSpeaker.init(applicationContext)
+        com.example.data.PetQuoteSettings.ensureTemplateExists()
         updatePetSprite(held = false) // Terapkan kostum tersimpan begitu overlay muncul
         serviceScope.launch {
             com.example.model.CostumeManager.kostumAktif.collect {
@@ -253,16 +254,23 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         idleTimerJob = serviceScope.launch {
             while (true) {
                 delay(3000L)
+                // Skip semua ngoceh/perubahan mood kalau layar HP lagi mati -- gak ada
+                // gunanya pet ngomong pas gak ada yang liat, cuma buang baterai & bikin
+                // suara nyeletuk aneh keluar dari saku pas lagi tidur.
+                val powerManager = getSystemService(android.content.Context.POWER_SERVICE) as? android.os.PowerManager
+                val isScreenOn = powerManager?.isInteractive ?: true
+                if (!isScreenOn) continue
+
                 if (!isDragging && !isFalling && !isPetHidden) {
                     val now = System.currentTimeMillis()
                     val elapsedSeconds = ((now - lastInteractionTimestamp) / 1000).toInt()
                     if (elapsedSeconds >= 20 && petEmotion != "Kesal") {
                         petEmotion = "Kesal"
-                        speakBubble(PetQuotes.kesalQuotes.random())
+                        speakBubble(com.example.data.PetQuoteSettings.getQuote("kesal", PetQuotes.kesalQuotes))
                         syncToObsidian()
                     } else if (elapsedSeconds >= 10 && petEmotion == "Senang") {
                         petEmotion = "Bosan"
-                        speakBubble(PetQuotes.boredQuotes.random())
+                        speakBubble(com.example.data.PetQuoteSettings.getQuote("bosan", PetQuotes.boredQuotes))
                         syncToObsidian()
                     }
 
@@ -273,7 +281,10 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                         if (recentlyTouched && geminiCooldownPassed && com.example.data.GeminiPetBrain.isConfigured()) {
                             requestSmartDialog()
                         } else {
-                            speakBubble(PetQuotes.tapQuotes.random())
+                            // Kategori "idle" TERPISAH dari "tap" -- default-nya sama
+                            // (tapQuotes) buat kompatibilitas, tapi Master bisa isi
+                            // section ## Idle sendiri di pet-quotes.md kalau mau beda.
+                            speakBubble(com.example.data.PetQuoteSettings.getQuote("idle", PetQuotes.tapQuotes))
                         }
                     }
                 }
@@ -575,7 +586,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                         initialTouchY = event.rawY
 
                         updatePetSprite(held = true)
-                        speakBubble(PetQuotes.dragQuotes.random())
+                        speakBubble(com.example.data.PetQuoteSettings.getQuote("drag", PetQuotes.dragQuotes))
                         return true
                     }
 
@@ -598,7 +609,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                         if (duration < 200 && deltaX < 15 && deltaY < 15) {
                             // Pet Tapped
                             updatePetSprite(held = false)
-                            speakBubble(PetQuotes.tapQuotes.random())
+                            speakBubble(com.example.data.PetQuoteSettings.getQuote("tap", PetQuotes.tapQuotes))
                             handleUserInteraction(5)
                             behaviorState = PetBehaviorState.IDLE
                             behaviorTicksRemaining = 0
@@ -712,55 +723,6 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                 windowManager.updateViewLayout(overlayView, p)
             } catch (e: Exception) {
                 // View belum siap / service sedang berhenti, abaikan
-            }
-        }
-    }
-
-    private fun startStairFallPhysics() {
-        val p = params ?: return
-        val displayMetrics = resources.displayMetrics
-        val floorY = displayMetrics.heightPixels - 300
-        val maxFallDistancePx = (250 * displayMetrics.density).toInt() // jatuh maksimal ~250dp, bukan selalu ke dasar layar
-        val screenHeight = (p.y + maxFallDistancePx).coerceAtMost(floorY)
-        val screenWidth = displayMetrics.widthPixels - 200
-
-        fallingJob?.cancel()
-        fallingJob = serviceScope.launch {
-            isFalling = true
-            updatePetSprite(held = true)
-            speakBubble(PetQuotes.fallQuotes.random())
-
-            var stepCount = 0
-            val stepHeightPx = 22
-            val stepWidthPx = 16
-
-            while (p.y < screenHeight && isFalling && !isDragging) {
-                stepCount++
-                p.y = (p.y + stepHeightPx).coerceAtMost(screenHeight)
-
-                // Stair-step horizontal shift (efek turun tangga / jatuh berayun)
-                val horizontalShift = if (stepCount % 2 == 0) stepWidthPx else -stepWidthPx
-                p.x = (p.x + horizontalShift).coerceIn(20, screenWidth)
-
-                try {
-                    windowManager.updateViewLayout(overlayView, p)
-                } catch (e: Exception) {
-                    break
-                }
-
-                delay(30L)
-            }
-
-            if (!isDragging && p.y >= screenHeight) {
-                p.y = screenHeight
-                try {
-                    windowManager.updateViewLayout(overlayView, p)
-                } catch (e: Exception) {
-                    // Ignore
-                }
-                isFalling = false
-                updatePetSprite(held = false)
-                speakBubble("Sampai di bawah! ✨")
             }
         }
     }
