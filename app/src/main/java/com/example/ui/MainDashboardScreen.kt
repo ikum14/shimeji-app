@@ -183,7 +183,7 @@ fun MainDashboardScreen() {
     LaunchedEffect(Unit) {
         com.example.data.TtsSpeaker.init(context)
         repeat(10) {
-            val voices = com.example.data.TtsSpeaker.getAvailableIndonesianVoices()
+            val voices = com.example.data.TtsSpeaker.getAvailableVoices()
             if (voices.isNotEmpty()) {
                 availableVoices = voices
                 if (selectedVoiceName == null) {
@@ -1497,7 +1497,7 @@ fun MainDashboardScreen() {
                                     ) {
                                         Column(modifier = Modifier.weight(1f)) {
                                             Text(voice.name, fontSize = 11.sp, color = Color.White, fontWeight = FontWeight.Bold)
-                                            Text(voice.locale.toString(), fontSize = 9.sp, color = Color(0xFFD6D6D6))
+                                            Text(voice.locale.displayName, fontSize = 9.sp, color = Color(0xFFD6D6D6))
                                         }
                                         if (isSelected) {
                                             Text("✓ Aktif", fontSize = 10.sp, color = Color.White)

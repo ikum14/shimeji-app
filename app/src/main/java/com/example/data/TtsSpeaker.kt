@@ -53,18 +53,21 @@ object TtsSpeaker {
     }
 
     /**
-     * Daftar suara Bahasa Indonesia yang tersedia di HP ini (dari engine TTS yang terpasang).
-     * Kalau kosong, berarti HP belum punya paket suara Indonesia — bisa ditambah lewat
+     * Daftar SEMUA suara yang tersedia di HP ini (dari engine TTS yang terpasang), apapun
+     * bahasanya -- gak dibatesin cuma Bahasa Indonesia lagi, soalnya suara Bahasa Inggris/
+     * Jepang/dll seringkali lebih natural kedengarannya, dan Master bisa aja mau pakai suara
+     * itu buat baca teks Indonesia (aksennya beda, tapi banyak yang lebih suka).
+     * Diurutin per bahasa dulu, baru per nama, biar suara Indonesia tetap gampang ditemuin
+     * di antara yang lain.
+     * Kalau kosong, berarti HP belum punya paket suara apapun -- bisa ditambah lewat
      * Settings > System > Languages > Text-to-speech output > Install voice data.
      */
-    fun getAvailableIndonesianVoices(): List<Voice> {
+    fun getAvailableVoices(): List<Voice> {
         if (!isReady) return emptyList()
         val allVoices = tts?.voices ?: return emptyList()
-        val indonesianVoices = allVoices.filter {
-            !it.isNetworkConnectionRequired &&
-                (it.locale.language == "id" || it.locale.language == "in")
-        }
-        return indonesianVoices.sortedBy { it.name }
+        return allVoices
+            .filter { !it.isNetworkConnectionRequired }
+            .sortedWith(compareBy({ it.locale.displayLanguage }, { it.name }))
     }
 
     fun getCurrentVoiceName(): String? = tts?.voice?.name
