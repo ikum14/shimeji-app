@@ -3,6 +3,7 @@ package com.example.ui.screens
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import kotlin.math.roundToInt
 import android.os.Build
 import android.provider.Settings
 import android.widget.Toast
@@ -159,7 +160,13 @@ fun MainDashboardScreen() {
     var biodataInputText by remember { mutableStateOf("") }
     var voiceMode by remember { mutableStateOf(com.example.data.NotificationVoiceSettings.getMode(context)) }
     var isPetVoiceMuted by remember { mutableStateOf(com.example.data.PetVoiceSettings.isMuted(context)) }
-    var chatterIntervalSec by remember { mutableFloatStateOf(com.example.data.IdleChatterSettings.getIntervalSeconds(context)) }
+    var chatterIntervalIndex by remember {
+        mutableFloatStateOf(
+            com.example.data.IdleChatterSettings.indexOf(
+                com.example.data.IdleChatterSettings.getIntervalSeconds(context)
+            ).toFloat()
+        )
+    }
     com.example.data.BubbleStyleSettings.init(context)
     var useMoodColor by remember { mutableStateOf(com.example.data.BubbleStyleSettings.useMoodColor.value) }
     var bubbleBgColor by remember { mutableStateOf(com.example.data.BubbleStyleSettings.bgColor.value) }
@@ -1296,7 +1303,8 @@ fun MainDashboardScreen() {
                     }
 
                     // ⏱️ Interval ngoceh -- seberapa sering pet ganti kalimat template pas idle.
-                    // Angka pasti (detik), diatur user, LANGSUNG kepakai tanpa restart app.
+                    // Pilihan TETAP (bukan slider bebas detik demi detik): 30 detik, lalu
+                    // loncat per menit. Angka LANGSUNG kepakai tanpa restart app.
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1315,14 +1323,10 @@ fun MainDashboardScreen() {
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White
                             )
-                            val totalSec = chatterIntervalSec.toInt()
-                            val displayText = if (totalSec < 60) {
-                                "$totalSec detik"
-                            } else {
-                                val menit = totalSec / 60
-                                val sisaDetik = totalSec % 60
-                                if (sisaDetik == 0) "$menit menit" else "$menit menit $sisaDetik detik"
-                            }
+                            val steps = com.example.data.IdleChatterSettings.INTERVAL_STEPS_SEC
+                            val currentIdx = chatterIntervalIndex.roundToInt().coerceIn(0, steps.size - 1)
+                            val totalSec = steps[currentIdx].toInt()
+                            val displayText = if (totalSec < 60) "$totalSec detik" else "${totalSec / 60} menit"
                             Text(
                                 text = displayText,
                                 fontSize = 14.sp,
@@ -1331,12 +1335,15 @@ fun MainDashboardScreen() {
                             )
                         }
                         Slider(
-                            value = chatterIntervalSec,
+                            value = chatterIntervalIndex,
                             onValueChange = {
-                                chatterIntervalSec = it
-                                com.example.data.IdleChatterSettings.setIntervalSeconds(context, it)
+                                chatterIntervalIndex = it
+                                val steps = com.example.data.IdleChatterSettings.INTERVAL_STEPS_SEC
+                                val idx = it.roundToInt().coerceIn(0, steps.size - 1)
+                                com.example.data.IdleChatterSettings.setIntervalSeconds(context, steps[idx])
                             },
-                            valueRange = com.example.data.IdleChatterSettings.MIN_INTERVAL_SEC..com.example.data.IdleChatterSettings.MAX_INTERVAL_SEC
+                            valueRange = 0f..(com.example.data.IdleChatterSettings.INTERVAL_STEPS_SEC.size - 1).toFloat(),
+                            steps = com.example.data.IdleChatterSettings.INTERVAL_STEPS_SEC.size - 2
                         )
                         Text(
                             text = "30 detik - 30 menit. Seberapa sering pet ganti kalimat pas lagi idle (gratis, gak manggil AI)",
