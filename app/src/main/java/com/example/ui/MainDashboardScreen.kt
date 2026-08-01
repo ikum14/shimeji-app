@@ -14,6 +14,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -1455,11 +1456,32 @@ fun MainDashboardScreen() {
 
                     HorizontalDivider(color = Color(0xFF555555))
 
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "🗣️ Pilih Suara (dari yang sudah terpasang di HP)",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            modifier = Modifier.weight(1f)
+                        )
+                        OutlinedButton(
+                            onClick = {
+                                com.example.data.TtsSpeaker.reconnectToSystemEngine(context)
+                                availableVoices = com.example.data.TtsSpeaker.getAvailableVoices()
+                            },
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                        ) {
+                            Icon(Icons.Default.Refresh, contentDescription = "Refresh", modifier = Modifier.size(14.dp))
+                        }
+                    }
                     Text(
-                        text = "🗣️ Pilih Suara (dari yang sudah terpasang di HP)",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
+                        text = "Baru ganti engine TTS di Settings HP (misal ke NekoSpeak/Sherpa-ONNX)? Tekan tombol refresh di atas biar app ini nyambung ulang, gak perlu force-stop app.",
+                        fontSize = 9.sp,
+                        color = Color(0xFF80CBC4)
                     )
 
                     if (availableVoices.isEmpty()) {

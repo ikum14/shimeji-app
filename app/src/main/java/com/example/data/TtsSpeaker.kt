@@ -95,16 +95,26 @@ object TtsSpeaker {
     /**
      * Bersihin simbol-simbol dekoratif dari teks sebelum dikirim ke TTS, soalnya kalau
      * gak dibersihin, engine TTS (apapun -- lokal, ElevenLabs, Google Cloud, dll) bakal
-     * baca simbolnya literal (misal "~" dibaca "gelombang"), bukan diabaikan kayak yang
-     * kita mau. Teks ASLI (dengan tilde dkk) tetap dipakai buat tampilan bubble -- ini
-     * cuma versi yang dikirim ke suara doang.
+     * baca simbolnya literal (misal "~" dibaca "gelombang", "*" dibaca "asterisk", kaomoji
+     * kayak "( •`.•` )" dibaca acak-acakan). Teks ASLI tetap dipakai buat tampilan bubble --
+     * ini cuma versi yang dikirim ke suara doang.
+     *
+     * Strateginya WHITELIST (bukan buang satu-satu simbol yang ketauan bermasalah, soalnya
+     * gak bakal pernah kekejar semua kemungkinan): cuma pertahanin huruf, angka, spasi, dan
+     * tanda baca kalimat dasar. Apapun di luar itu (emoji, kaomoji, asterisk, tilde, dll)
+     * otomatis kebuang, apapun bentuknya.
      */
     private fun sanitizeForSpeech(text: String): String {
-        return text
-            .replace("~", "") // tilde dekoratif ala "Kyaa~!" -- jangan dibaca "gelombang"
-            .replace(Regex("\\p{So}"), "") // emoji & simbol grafis lain (kucing²/love/dsb)
-            .replace(Regex("\\s+"), " ") // rapiin spasi ganda sisa penghapusan simbol
+        var cleaned = text
+            .replace(Regex("[^\\p{L}\\p{N}\\s.,!?'-]"), "")
+            .replace(Regex("\\s+"), " ")
             .trim()
+        // Kalau abis dibersihin cuma nyisain tanda baca doang (misal sisa kaomoji yang
+        // udah dikupas simbolnya), anggap kosong -- daripada TTS baca "titik" sendirian.
+        if (cleaned.isNotBlank() && cleaned.none { it.isLetterOrDigit() }) {
+            cleaned = ""
+        }
+        return cleaned
     }
 
     /** Coba baca 1 kalimat contoh pakai suara yang lagi aktif, buat preview di UI. */
@@ -117,5 +127,16 @@ object TtsSpeaker {
         tts?.shutdown()
         tts = null
         isReady = false
+    }
+
+    /**
+     * Maksa putus & nyambung ulang ke engine TTS -- dipakai kalau Master baru aja ganti
+     * "Preferred engine" TTS di Settings HP (misal ke NekoSpeak/Sherpa-ONNX), soalnya
+     * koneksi TTS yang lama nempel terus ke engine LAMA (Google TTS bawaan HP) selama
+     * service masih hidup di background, gak otomatis pindah sendiri.
+     */
+    fun reconnectToSystemEngine(context: Context) {
+        shutdown()
+        init(context)
     }
 }
