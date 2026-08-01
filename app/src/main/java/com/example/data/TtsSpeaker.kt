@@ -83,10 +83,28 @@ object TtsSpeaker {
         val ctx = pendingContext
         if (ctx != null && PetVoiceSettings.isMuted(ctx)) return // Master lagi mute-in suara pet
 
+        val cleanText = sanitizeForSpeech(text)
+        if (cleanText.isBlank()) return
+
         val params = Bundle().apply {
             putInt(TextToSpeech.Engine.KEY_PARAM_STREAM, AudioManager.STREAM_NOTIFICATION)
         }
-        tts?.speak(text, TextToSpeech.QUEUE_ADD, params, System.currentTimeMillis().toString())
+        tts?.speak(cleanText, TextToSpeech.QUEUE_ADD, params, System.currentTimeMillis().toString())
+    }
+
+    /**
+     * Bersihin simbol-simbol dekoratif dari teks sebelum dikirim ke TTS, soalnya kalau
+     * gak dibersihin, engine TTS (apapun -- lokal, ElevenLabs, Google Cloud, dll) bakal
+     * baca simbolnya literal (misal "~" dibaca "gelombang"), bukan diabaikan kayak yang
+     * kita mau. Teks ASLI (dengan tilde dkk) tetap dipakai buat tampilan bubble -- ini
+     * cuma versi yang dikirim ke suara doang.
+     */
+    private fun sanitizeForSpeech(text: String): String {
+        return text
+            .replace("~", "") // tilde dekoratif ala "Kyaa~!" -- jangan dibaca "gelombang"
+            .replace(Regex("\\p{So}"), "") // emoji & simbol grafis lain (kucing²/love/dsb)
+            .replace(Regex("\\s+"), " ") // rapiin spasi ganda sisa penghapusan simbol
+            .trim()
     }
 
     /** Coba baca 1 kalimat contoh pakai suara yang lagi aktif, buat preview di UI. */
