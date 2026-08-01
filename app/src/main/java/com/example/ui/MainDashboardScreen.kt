@@ -160,6 +160,10 @@ fun MainDashboardScreen() {
     var voiceMode by remember { mutableStateOf(com.example.data.NotificationVoiceSettings.getMode(context)) }
     var isPetVoiceMuted by remember { mutableStateOf(com.example.data.PetVoiceSettings.isMuted(context)) }
     var chatterIntervalSec by remember { mutableFloatStateOf(com.example.data.IdleChatterSettings.getIntervalSeconds(context)) }
+    com.example.data.BubbleStyleSettings.init(context)
+    var useMoodColor by remember { mutableStateOf(com.example.data.BubbleStyleSettings.useMoodColor.value) }
+    var bubbleBgColor by remember { mutableStateOf(com.example.data.BubbleStyleSettings.bgColor.value) }
+    var bubbleTextColor by remember { mutableStateOf(com.example.data.BubbleStyleSettings.textColor.value) }
     com.example.data.BubbleSettings.init(context)
     var bubbleFontSize by remember { mutableFloatStateOf(com.example.data.BubbleSettings.fontSizeSp.value) }
     var availableVoices by remember { mutableStateOf<List<android.speech.tts.Voice>>(emptyList()) }
@@ -1311,8 +1315,16 @@ fun MainDashboardScreen() {
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White
                             )
+                            val totalSec = chatterIntervalSec.toInt()
+                            val displayText = if (totalSec < 60) {
+                                "$totalSec detik"
+                            } else {
+                                val menit = totalSec / 60
+                                val sisaDetik = totalSec % 60
+                                if (sisaDetik == 0) "$menit menit" else "$menit menit $sisaDetik detik"
+                            }
                             Text(
-                                text = "${chatterIntervalSec.toInt()} detik",
+                                text = displayText,
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF80CBC4)
@@ -1324,11 +1336,10 @@ fun MainDashboardScreen() {
                                 chatterIntervalSec = it
                                 com.example.data.IdleChatterSettings.setIntervalSeconds(context, it)
                             },
-                            valueRange = com.example.data.IdleChatterSettings.MIN_INTERVAL_SEC..com.example.data.IdleChatterSettings.MAX_INTERVAL_SEC,
-                            steps = (com.example.data.IdleChatterSettings.MAX_INTERVAL_SEC - com.example.data.IdleChatterSettings.MIN_INTERVAL_SEC).toInt() - 1
+                            valueRange = com.example.data.IdleChatterSettings.MIN_INTERVAL_SEC..com.example.data.IdleChatterSettings.MAX_INTERVAL_SEC
                         )
                         Text(
-                            text = "Seberapa sering pet ganti kalimat pas lagi idle (gratis, gak manggil AI)",
+                            text = "30 detik - 30 menit. Seberapa sering pet ganti kalimat pas lagi idle (gratis, gak manggil AI)",
                             fontSize = 11.sp,
                             color = Color(0xFFB0BEC5)
                         )
@@ -1513,6 +1524,111 @@ fun MainDashboardScreen() {
                         fontSize = 10.sp,
                         color = Color(0xFFB0BEC5)
                     )
+                }
+            }
+
+            // 🎨 Warna Bubble Card
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF263238)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = "🎨 Warna Bubble",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = "Warna otomatis ikut mood",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                            Text(
+                                text = "Senang=pink, Bosan=biru, Kesal=merah",
+                                fontSize = 10.sp,
+                                color = Color(0xFFB0BEC5)
+                            )
+                        }
+                        Switch(
+                            checked = useMoodColor,
+                            onCheckedChange = { checked ->
+                                useMoodColor = checked
+                                com.example.data.BubbleStyleSettings.setUseMoodColor(context, checked)
+                            }
+                        )
+                    }
+
+                    if (!useMoodColor) {
+                        Text(
+                            text = "Warna Background",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFB0BEC5)
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            com.example.data.BubbleStyleSettings.BG_COLOR_PRESETS.forEach { presetColor ->
+                                Box(
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .background(Color(presetColor), shape = RoundedCornerShape(8.dp))
+                                        .border(
+                                            width = if (bubbleBgColor == presetColor) 2.dp else 1.dp,
+                                            color = if (bubbleBgColor == presetColor) Color(0xFF80CBC4) else Color(0xFF555555),
+                                            shape = RoundedCornerShape(8.dp)
+                                        )
+                                        .clickable {
+                                            bubbleBgColor = presetColor
+                                            com.example.data.BubbleStyleSettings.setBgColor(context, presetColor)
+                                        }
+                                )
+                            }
+                        }
+
+                        Text(
+                            text = "Warna Teks",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFB0BEC5)
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            com.example.data.BubbleStyleSettings.TEXT_COLOR_PRESETS.forEach { presetColor ->
+                                Box(
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .background(Color(presetColor), shape = RoundedCornerShape(8.dp))
+                                        .border(
+                                            width = if (bubbleTextColor == presetColor) 2.dp else 1.dp,
+                                            color = if (bubbleTextColor == presetColor) Color(0xFF80CBC4) else Color(0xFF555555),
+                                            shape = RoundedCornerShape(8.dp)
+                                        )
+                                        .clickable {
+                                            bubbleTextColor = presetColor
+                                            com.example.data.BubbleStyleSettings.setTextColor(context, presetColor)
+                                        }
+                                )
+                            }
+                        }
+                    }
                 }
             }
 

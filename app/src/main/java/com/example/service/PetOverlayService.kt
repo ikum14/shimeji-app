@@ -66,6 +66,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     override val lifecycle: Lifecycle get() = lifecycleRegistry
     override val savedStateRegistry: SavedStateRegistry get() = savedStateRegistryController.savedStateRegistry
     private val speechBubbleTextState = mutableStateOf("Halo Master! Seret aku ke atas ya~")
+    private val bubbleMoodState = mutableStateOf("Senang")
 
 
     private lateinit var windowManager: WindowManager
@@ -85,6 +86,10 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     private var isDragging = false
     private var isFalling = false
     private var isPetHidden = false
+
+    /** Job & durasi buat mekanisme "intip" -- pet nongol sebentar pas disembunyiin, lalu balik sembunyi lagi. */
+    private var peekJob: Job? = null
+    private val PEEK_VISIBLE_MS = 6_000L // 6 detik nongol tiap kali "intip"
 
     private var petSizePx = 0
     private var behaviorState = PetBehaviorState.IDLE
@@ -107,7 +112,11 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     private var petLevel = 1
     private var petXp = 0
     private val maxXp = com.example.data.PetProgressStore.MAX_XP_PER_LEVEL
-    private var petEmotion = "Senang" // "Senang", "Bosan", "Kesal"
+    private var petEmotion: String = "Senang" // "Senang", "Bosan", "Kesal"
+        set(value) {
+            field = value
+            bubbleMoodState.value = value
+        }
     private var lastInteractionTimestamp = System.currentTimeMillis()
 
     private var initialX = 0
@@ -136,6 +145,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         // startAutonomousBehaviorLoop()
         com.example.data.TtsSpeaker.init(applicationContext)
         com.example.data.PetQuoteSettings.ensureTemplateExists()
+        com.example.data.BubbleStyleSettings.init(applicationContext)
         updatePetSprite(held = false) // Terapkan kostum tersimpan begitu overlay muncul
         serviceScope.launch {
             com.example.model.CostumeManager.kostumAktif.collect {
@@ -215,7 +225,20 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
      * Kalimat template (PetQuotes) tetap tampil dulu sebagai placeholder instan,
      * lalu ditimpa begitu balasan AI datang (butuh beberapa detik, ada koneksi internet).
      */
-    private fun requestSmartDialog() {
+    /**
+     * Minta Gemini bikin kalimat celotehan baru berdasarkan biodata.md + SEMUA file .md
+     * lain di vault pet-virtual + status pet saat ini. Semua file dibaca ULANG dari disk
+     * tiap kali fungsi ini jalan (real-time) — bukan dari cache lama — supaya perubahan
+     * terbaru yang kamu tulis di Obsidian langsung kepakai tanpa perlu buka dashboard dulu.
+     * Dipanggil dari 2 tempat: (1) tap langsung ke pet, (2) idle chatter timer kalau pet
+     * baru aja disentuh. Ada cooldown 1 menit antar request biar kuota API gak cepet abis
+     * (lihat SMART_DIALOG_COOLDOWN_MS).
+     * Kalimat template (PetQuotes) tetap tampil dulu sebagai placeholder instan,
+     * lalu ditimpa begitu balasan AI datang (butuh beberapa detik, ada koneksi internet).
+     * Kalimat AI yang berhasil didapat juga otomatis DISIMPAN ke pet-quotes.md di kategori
+     * `category`, supaya ke depannya ikut kepakai lagi sebagai template gratis.
+     */
+    private fun requestSmartDialog(category: String) {
         if (!com.example.data.GeminiPetBrain.isConfigured()) return
         val now = System.currentTimeMillis()
         if (now - lastSmartDialogRequestTime < SMART_DIALOG_COOLDOWN_MS) {
@@ -234,15 +257,29 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                 petEmotion = petEmotion,
                 vaultContext = vaultContext
             )
+            peekAndReveal()
             speakBubble(reply)
+
+            // Simpan ke pet-quotes.md HANYA kalau ini beneran balasan AI (bukan pesan error
+            // fallback kayak "Kuota AI-ku abis" dll -- gak mau nyampah kalimat error jadi template).
+            val looksLikeError = reply.startsWith("Kuota AI-ku") ||
+                reply.startsWith("Aduh, otak AI-ku") ||
+                reply.startsWith("Koneksi ke otak AI-ku") ||
+                reply.startsWith("Ups, ada yang salah") ||
+                reply.startsWith("Hmm, aku belum tahu")
+            if (!looksLikeError) {
+                com.example.data.PetQuoteSettings.appendGeneratedQuote(category, reply)
+            }
         }
     }
 
     /**
      * Idle timer yang udah ada dari awal (jalan tiap 3 detik): urus perubahan mood
-     * (Bosan/Kesal) DAN sekarang juga urus "ngoceh berkala":
-     * - Tiap IDLE_CHATTER_INTERVAL_MS (10 detik): pet SELALU ngomong sesuatu, gratis,
+     * (Bosan/Kesal, HANYA kalau pet lagi full ditampilin) DAN sekarang juga urus
+     * "ngoceh berkala":
+     * - Tiap interval dari IdleChatterSettings: pet SELALU ngomong sesuatu, gratis,
      *   pakai kalimat template (PetQuotes) -- gak nunggu network, gak manggil API.
+     *   Ini tetap jalan WALAU pet lagi disembunyiin (bikin efek "intip" -- lihat peekAndReveal()).
      * - Tapi KALAU pet baru aja disentuh dalam RECENT_INTERACTION_WINDOW_MS (1 menit)
      *   terakhir DAN cooldown Gemini (SMART_DIALOG_COOLDOWN_MS, 1 menit) udah lewat,
      *   tick ini juga sekalian minta kalimat "pintar" dari Gemini (async, nimpa bubble
@@ -260,9 +297,13 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                 val powerManager = getSystemService(android.content.Context.POWER_SERVICE) as? android.os.PowerManager
                 val isScreenOn = powerManager?.isInteractive ?: true
                 if (!isScreenOn) continue
+                if (isDragging || isFalling) continue
 
-                if (!isDragging && !isFalling && !isPetHidden) {
-                    val now = System.currentTimeMillis()
+                val now = System.currentTimeMillis()
+
+                // Perubahan mood cuma kalau pet lagi full ditampilin -- kalau lagi
+                // disembunyiin, gak usah repot ganti mood, gak ada yang liat perubahannya.
+                if (!isPetHidden) {
                     val elapsedSeconds = ((now - lastInteractionTimestamp) / 1000).toInt()
                     if (elapsedSeconds >= 20 && petEmotion != "Kesal") {
                         petEmotion = "Kesal"
@@ -273,19 +314,17 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                         speakBubble(com.example.data.PetQuoteSettings.getQuote("bosan", PetQuotes.boredQuotes))
                         syncToObsidian()
                     }
+                }
 
-                    if (now - lastIdleChatterTime >= com.example.data.IdleChatterSettings.getIntervalMs(applicationContext)) {
-                        lastIdleChatterTime = now
-                        val recentlyTouched = now - lastInteractionTimestamp <= RECENT_INTERACTION_WINDOW_MS
-                        val geminiCooldownPassed = now - lastSmartDialogRequestTime >= SMART_DIALOG_COOLDOWN_MS
-                        if (recentlyTouched && geminiCooldownPassed && com.example.data.GeminiPetBrain.isConfigured()) {
-                            requestSmartDialog()
-                        } else {
-                            // Kategori "idle" TERPISAH dari "tap" -- default-nya sama
-                            // (tapQuotes) buat kompatibilitas, tapi Master bisa isi
-                            // section ## Idle sendiri di pet-quotes.md kalau mau beda.
-                            speakBubble(com.example.data.PetQuoteSettings.getQuote("idle", PetQuotes.tapQuotes))
-                        }
+                if (now - lastIdleChatterTime >= com.example.data.IdleChatterSettings.getIntervalMs(applicationContext)) {
+                    lastIdleChatterTime = now
+                    val recentlyTouched = now - lastInteractionTimestamp <= RECENT_INTERACTION_WINDOW_MS
+                    val geminiCooldownPassed = now - lastSmartDialogRequestTime >= SMART_DIALOG_COOLDOWN_MS
+                    if (recentlyTouched && geminiCooldownPassed && com.example.data.GeminiPetBrain.isConfigured()) {
+                        requestSmartDialog("idle")
+                    } else {
+                        peekAndReveal()
+                        speakBubble(com.example.data.PetQuoteSettings.getQuote("idle", PetQuotes.idleQuotes))
                     }
                 }
             }
@@ -391,31 +430,30 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     private fun listenForNotificationBus() {
         serviceScope.launch {
             NotificationBus.notifications.collect { incoming ->
-                if (!isPetHidden) {
-                    speechCard?.visibility = View.VISIBLE
-                    updateBubbleUi(incoming.toSpeechBubbleText())
-                    updatePetSprite(held = false)
+                peekAndReveal()
+                speechCard?.visibility = View.VISIBLE
+                updateBubbleUi(incoming.toSpeechBubbleText())
+                updatePetSprite(held = false)
 
-                    when (com.example.data.NotificationVoiceSettings.getMode(applicationContext)) {
-                        com.example.data.VoiceReadMode.OFF -> { /* diam, tidak bersuara */ }
-                        com.example.data.VoiceReadMode.SENDER_ONLY -> {
-                            com.example.data.TtsSpeaker.speak("Pesan masuk dari ${incoming.senderName}")
-                        }
-                        com.example.data.VoiceReadMode.FULL_MESSAGE -> {
-                            com.example.data.TtsSpeaker.speak("Pesan dari ${incoming.senderName}: ${incoming.messageText}")
-                        }
+                when (com.example.data.NotificationVoiceSettings.getMode(applicationContext)) {
+                    com.example.data.VoiceReadMode.OFF -> { /* diam, tidak bersuara */ }
+                    com.example.data.VoiceReadMode.SENDER_ONLY -> {
+                        com.example.data.TtsSpeaker.speak("Pesan masuk dari ${incoming.senderName}")
                     }
-
-                    // Share incoming notification data across overlay & main app
-                    com.example.model.PetDataBus.shareData(
-                        level = petLevel,
-                        xp = petXp,
-                        emotion = "HAPPY",
-                        speechMessage = incoming.toSpeechBubbleText(),
-                        sender = incoming.senderName,
-                        message = incoming.messageText
-                    )
+                    com.example.data.VoiceReadMode.FULL_MESSAGE -> {
+                        com.example.data.TtsSpeaker.speak("Pesan dari ${incoming.senderName}: ${incoming.messageText}")
+                    }
                 }
+
+                // Share incoming notification data across overlay & main app
+                com.example.model.PetDataBus.shareData(
+                    level = petLevel,
+                    xp = petXp,
+                    emotion = "HAPPY",
+                    speechMessage = incoming.toSpeechBubbleText(),
+                    sender = incoming.senderName,
+                    message = incoming.messageText
+                )
             }
         }
     }
@@ -474,10 +512,19 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             setViewTreeSavedStateRegistryOwner(this@PetOverlayService)
             setContent {
                 val text by remember { speechBubbleTextState }
+                val mood by remember { bubbleMoodState }
                 val fontSizeSp by com.example.data.BubbleSettings.fontSizeSp.collectAsState()
+                val useMoodColor by com.example.data.BubbleStyleSettings.useMoodColor.collectAsState()
+                val customBgColor by com.example.data.BubbleStyleSettings.bgColor.collectAsState()
+                val customTextColor by com.example.data.BubbleStyleSettings.textColor.collectAsState()
+                val bgColor = if (useMoodColor) {
+                    Color(com.example.data.BubbleStyleSettings.getEffectiveBgColor(mood))
+                } else {
+                    Color(customBgColor)
+                }
                 Surface(
                     shape = RoundedCornerShape(16.dp),
-                    color = Color.White,
+                    color = bgColor,
                     shadowElevation = 6.dp,
                     modifier = Modifier
                         .width(230.dp)
@@ -492,7 +539,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                         Text(
                             text = text,
                             fontSize = fontSizeSp.sp,
-                            color = Color(0xFF333333)
+                            color = Color(customTextColor)
                         )
                     }
                 }
@@ -613,7 +660,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                             handleUserInteraction(5)
                             behaviorState = PetBehaviorState.IDLE
                             behaviorTicksRemaining = 0
-                            requestSmartDialog()
+                            requestSmartDialog("tap")
                         } else {
                             // Released after drag -> tetap diam di titik itu (nggak jatuh lagi, atas request Master)
                             updatePetSprite(held = false)
@@ -727,8 +774,31 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         }
     }
 
+    /**
+     * Kalau pet lagi disembunyiin (isPetHidden), munculin sebentar (petImage + speechCard)
+     * buat efek "intip" -- dipanggil sebelum ngoceh berkala / balasan AI / notifikasi
+     * masuk, biar walau disembunyiin, pet tetap kelihatan sekilas + bubble-nya pas ada
+     * sesuatu yang mau disampein. Otomatis balik sembunyi lagi setelah PEEK_VISIBLE_MS,
+     * KECUALI Master keburu pencet tombol show (jadi full show beneran).
+     * Kalau pet lagi full ditampilin (!isPetHidden), fungsi ini gak ngapa-ngapain.
+     */
+    private fun peekAndReveal() {
+        if (!isPetHidden) return
+        peekJob?.cancel()
+        petImage?.visibility = View.VISIBLE
+        speechCard?.visibility = View.VISIBLE
+        peekJob = serviceScope.launch {
+            delay(PEEK_VISIBLE_MS)
+            if (isPetHidden) { // pastiin Master belum keburu pencet show full di antara waktu ini
+                petImage?.visibility = View.GONE
+                speechCard?.visibility = View.GONE
+            }
+        }
+    }
+
     private fun togglePetVisibility() {
         isPetHidden = !isPetHidden
+        peekJob?.cancel()
         if (isPetHidden) {
             speechCard?.visibility = View.GONE
             petImage?.visibility = View.GONE

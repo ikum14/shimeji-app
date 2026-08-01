@@ -133,6 +133,14 @@ object PetQuotes {
         "Semangat hari ini ya, Master!"
     )
 
+    val idleQuotes = listOf(
+        "Lagi santai aja nih di sini~",
+        "Bengong dulu ah...",
+        "Hmm, apa ya enaknya dilakuin sekarang~",
+        "Nungguin Master nih, hehe",
+        "*duduk manis nunggu diajak main*"
+    )
+
     val dragQuotes = listOf(
         "Kyaaa~! Aku diangkat!",
         "Waaaa! Jangan jatuhin aku!",

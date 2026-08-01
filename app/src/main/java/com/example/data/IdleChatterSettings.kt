@@ -10,9 +10,9 @@ object IdleChatterSettings {
     private const val PREFS_NAME = "pet_idle_chatter_prefs"
     private const val KEY_INTERVAL_SEC = "chatter_interval_sec"
 
-    const val MIN_INTERVAL_SEC = 10f
-    const val MAX_INTERVAL_SEC = 120f
-    const val DEFAULT_INTERVAL_SEC = 30f
+    const val MIN_INTERVAL_SEC = 30f
+    const val MAX_INTERVAL_SEC = 1800f // 30 menit
+    const val DEFAULT_INTERVAL_SEC = 60f
 
     fun getIntervalSeconds(context: Context): Float {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
