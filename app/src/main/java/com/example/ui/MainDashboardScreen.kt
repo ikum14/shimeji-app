@@ -159,6 +159,7 @@ fun MainDashboardScreen() {
     var biodataInputText by remember { mutableStateOf("") }
     var voiceMode by remember { mutableStateOf(com.example.data.NotificationVoiceSettings.getMode(context)) }
     var isPetVoiceMuted by remember { mutableStateOf(com.example.data.PetVoiceSettings.isMuted(context)) }
+    var chatterIntervalSec by remember { mutableFloatStateOf(com.example.data.IdleChatterSettings.getIntervalSeconds(context)) }
     com.example.data.BubbleSettings.init(context)
     var bubbleFontSize by remember { mutableFloatStateOf(com.example.data.BubbleSettings.fontSizeSp.value) }
     var availableVoices by remember { mutableStateOf<List<android.speech.tts.Voice>>(emptyList()) }
@@ -1287,6 +1288,49 @@ fun MainDashboardScreen() {
                                 isPetVoiceMuted = !checkedOn
                                 com.example.data.PetVoiceSettings.setMuted(context, isPetVoiceMuted)
                             }
+                        )
+                    }
+
+                    // ⏱️ Interval ngoceh -- seberapa sering pet ganti kalimat template pas idle.
+                    // Angka pasti (detik), diatur user, LANGSUNG kepakai tanpa restart app.
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFF1E1E1E), RoundedCornerShape(12.dp))
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "⏱️ Interval Ngoceh Pet",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                            Text(
+                                text = "${chatterIntervalSec.toInt()} detik",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF80CBC4)
+                            )
+                        }
+                        Slider(
+                            value = chatterIntervalSec,
+                            onValueChange = {
+                                chatterIntervalSec = it
+                                com.example.data.IdleChatterSettings.setIntervalSeconds(context, it)
+                            },
+                            valueRange = com.example.data.IdleChatterSettings.MIN_INTERVAL_SEC..com.example.data.IdleChatterSettings.MAX_INTERVAL_SEC,
+                            steps = (com.example.data.IdleChatterSettings.MAX_INTERVAL_SEC - com.example.data.IdleChatterSettings.MIN_INTERVAL_SEC).toInt() - 1
+                        )
+                        Text(
+                            text = "Seberapa sering pet ganti kalimat pas lagi idle (gratis, gak manggil AI)",
+                            fontSize = 11.sp,
+                            color = Color(0xFFB0BEC5)
                         )
                     }
 

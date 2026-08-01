@@ -54,6 +54,12 @@ object NotificationBus {
  */
 class PetNotificationListenerService : NotificationListenerService() {
 
+    // Cegah notifikasi yang SAMA PERSIS (WhatsApp/Telegram kadang "refresh" notifikasi
+    // tanpa pesan baru beneran) dibacain berkali-kali padahal gak ada pesan baru.
+    private var lastEmittedKey: String? = null
+    private var lastEmittedAt: Long = 0L
+    private val DEDUPE_WINDOW_MS = 5 * 60_000L // 5 menit
+
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         super.onNotificationPosted(sbn)
         val sbnNotNull = sbn ?: return
@@ -77,6 +83,17 @@ class PetNotificationListenerService : NotificationListenerService() {
         if (!isTargetApp || isGroupSummary) return
 
         if (text.isNotBlank()) {
+            // Dedupe: kalau isi & pengirimnya SAMA PERSIS kayak notif terakhir yang
+            // barusan dibacain (dalam 5 menit terakhir), anggap ini repost sistem,
+            // bukan pesan baru -- jangan dibacain ulang.
+            val dedupeKey = "$packageName|$title|$text"
+            val now = System.currentTimeMillis()
+            if (dedupeKey == lastEmittedKey && (now - lastEmittedAt) < DEDUPE_WINDOW_MS) {
+                return
+            }
+            lastEmittedKey = dedupeKey
+            lastEmittedAt = now
+
             val appLabel = when {
                 packageName.contains("whatsapp") -> "WhatsApp"
                 packageName.contains("telegram") -> "Telegram"

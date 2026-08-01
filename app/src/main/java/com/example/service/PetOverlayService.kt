@@ -95,7 +95,8 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
     /** Waktu terakhir pet ngoceh pakai kalimat template (gratis, gak manggil API). */
     private var lastIdleChatterTime = 0L
-    private val IDLE_CHATTER_INTERVAL_MS = 10_000L // pet ganti kalimat tiap 10 detik
+    // Interval-nya sekarang diatur user lewat slider di dashboard (IdleChatterSettings),
+    // dibaca live tiap tick -- BUKAN angka mati lagi.
 
     /** Jendela waktu: Gemini cuma boleh dipanggil otomatis kalau pet DISENTUH dalam X ms terakhir. */
     private val RECENT_INTERACTION_WINDOW_MS = 60_000L // 1 menit
@@ -265,7 +266,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                         syncToObsidian()
                     }
 
-                    if (now - lastIdleChatterTime >= IDLE_CHATTER_INTERVAL_MS) {
+                    if (now - lastIdleChatterTime >= com.example.data.IdleChatterSettings.getIntervalMs(applicationContext)) {
                         lastIdleChatterTime = now
                         val recentlyTouched = now - lastInteractionTimestamp <= RECENT_INTERACTION_WINDOW_MS
                         val geminiCooldownPassed = now - lastSmartDialogRequestTime >= SMART_DIALOG_COOLDOWN_MS
