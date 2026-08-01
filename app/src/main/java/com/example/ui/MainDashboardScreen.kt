@@ -32,6 +32,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
@@ -48,6 +49,8 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -157,6 +160,7 @@ fun MainDashboardScreen() {
     // Obsidian Memory System State
     val userMemory by com.example.data.ObsidianMemoryManager.userMemory.collectAsState()
     var isEditingBiodata by remember { mutableStateOf(false) }
+    var selectedTab by remember { mutableStateOf(0) } // 0=Home, 1=Obsidian, 2=TTS
     var biodataInputText by remember { mutableStateOf("") }
     var voiceMode by remember { mutableStateOf(com.example.data.NotificationVoiceSettings.getMode(context)) }
     var isPetVoiceMuted by remember { mutableStateOf(com.example.data.PetVoiceSettings.isMuted(context)) }
@@ -292,6 +296,28 @@ fun MainDashboardScreen() {
                     containerColor = MaterialTheme.colorScheme.surfaceVariant
                 )
             )
+        },
+        bottomBar = {
+            NavigationBar {
+                NavigationBarItem(
+                    selected = selectedTab == 0,
+                    onClick = { selectedTab = 0 },
+                    icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
+                    label = { Text("Home") }
+                )
+                NavigationBarItem(
+                    selected = selectedTab == 1,
+                    onClick = { selectedTab = 1 },
+                    icon = { Icon(Icons.Default.Info, contentDescription = "Obsidian") },
+                    label = { Text("Obsidian") }
+                )
+                NavigationBarItem(
+                    selected = selectedTab == 2,
+                    onClick = { selectedTab = 2 },
+                    icon = { Icon(Icons.Default.Settings, contentDescription = "TTS") },
+                    label = { Text("TTS") }
+                )
+            }
         }
     ) { innerPadding ->
         Column(
@@ -310,6 +336,7 @@ fun MainDashboardScreen() {
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            if (selectedTab == 0) {
             // Permission Alert / Status Card
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -930,6 +957,8 @@ fun MainDashboardScreen() {
                 }
             }
 
+            }
+            if (selectedTab == 1) {
             // Obsidian Integration Card
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -1251,6 +1280,8 @@ fun MainDashboardScreen() {
                 }
             }
 
+            }
+            if (selectedTab == 2) {
             // 🔊 Voice Notification Settings Card
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -1639,6 +1670,8 @@ fun MainDashboardScreen() {
                 }
             }
 
+            }
+            if (selectedTab == 0) {
             // 🎮 Mini-Game Suwit Pet Card (+20 XP & Unlock Costume)
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -1799,6 +1832,7 @@ fun MainDashboardScreen() {
                         }
                     }
                 }
+            }
             }
 
         }
