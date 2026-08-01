@@ -118,9 +118,9 @@ object ObsidianMemoryManager {
     }
 
     /**
-     * Baca SEMUA file .md di folder vault pet-virtual (kecuali pet_progress.md, karena itu
-     * data teknis internal pet — bukan "pengetahuan" yang relevan buat AI), digabung jadi
-     * satu konteks teks buat "otak" pet.
+     * Baca SEMUA file .md di folder vault pet-virtual (kecuali pet_progress.md & pet-quotes.md,
+     * karena itu data teknis internal pet / script kalimat -- bukan "pengetahuan" yang relevan
+     * buat AI), digabung jadi satu konteks teks buat "otak" pet.
      *
      * Dipanggil ulang setiap kali pet mau ngomong (real-time, TIDAK di-cache) supaya file
      * baru/perubahan terbaru di Obsidian langsung kepakai tanpa perlu buka dashboard dulu.
@@ -134,7 +134,8 @@ object ObsidianMemoryManager {
         if (!vaultDir.exists()) return ""
 
         val mdFiles = vaultDir.listFiles { file ->
-            file.isFile && file.extension.equals("md", ignoreCase = true) && file.name != "pet_progress.md"
+            file.isFile && file.extension.equals("md", ignoreCase = true) &&
+                file.name != "pet_progress.md" && file.name != "pet-quotes.md"
         }?.sortedBy { it.name } ?: return ""
 
         val builder = StringBuilder()
