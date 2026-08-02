@@ -180,6 +180,21 @@ fun MainDashboardScreen() {
     var bubbleFontSize by remember { mutableFloatStateOf(com.example.data.BubbleSettings.fontSizeSp.value) }
     var availableVoices by remember { mutableStateOf<List<android.speech.tts.Voice>>(emptyList()) }
     var selectedVoiceName by remember { mutableStateOf(com.example.data.NotificationVoiceSettings.getSelectedVoiceName(context)) }
+    var availableEngines by remember { mutableStateOf<List<android.speech.tts.TextToSpeech.EngineInfo>>(emptyList()) }
+    var selectedEnginePackage by remember { mutableStateOf(com.example.data.TtsSpeaker.getSelectedEnginePackage(context)) }
+    val ttsCoroutineScope = rememberCoroutineScope()
+
+    LaunchedEffect(Unit) {
+        com.example.data.TtsSpeaker.init(context)
+        repeat(10) {
+            val engines = com.example.data.TtsSpeaker.getInstalledEngines()
+            if (engines.isNotEmpty()) {
+                availableEngines = engines
+                return@LaunchedEffect
+            }
+            kotlinx.coroutines.delay(400)
+        }
+    }
 
     LaunchedEffect(Unit) {
         com.example.data.TtsSpeaker.init(context)
@@ -1456,6 +1471,71 @@ fun MainDashboardScreen() {
 
                     HorizontalDivider(color = Color(0xFF555555))
 
+                    // 🔌 Engine TTS -- pilih SECARA EKSPLISIT engine mana yang dipakai
+                    // (misal VoxSherpa/NekoSpeak), bukan ngandelin deteksi "default sistem"
+                    // yang ternyata gak reliable di beberapa HP (misal HyperOS).
+                    Text(
+                        text = "🔌 Engine TTS",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    if (availableEngines.isEmpty()) {
+                        Text(
+                            text = "Lagi nyari engine TTS yang terpasang...",
+                            fontSize = 10.sp,
+                            color = Color(0xFFBBBBBB)
+                        )
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            availableEngines.forEach { engine ->
+                                val isSelected = engine.name == selectedEnginePackage
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(
+                                            if (isSelected) Color(0xFF37474F) else Color(0xFF1E1E1E),
+                                            RoundedCornerShape(10.dp)
+                                        )
+                                        .clickable {
+                                            com.example.data.TtsSpeaker.switchToEngine(context, engine.name)
+                                            selectedEnginePackage = engine.name
+                                            availableVoices = emptyList()
+                                            selectedVoiceName = null
+                                            ttsCoroutineScope.launch {
+                                                repeat(10) {
+                                                    kotlinx.coroutines.delay(400)
+                                                    val voices = com.example.data.TtsSpeaker.getAvailableVoices()
+                                                    if (voices.isNotEmpty()) {
+                                                        availableVoices = voices
+                                                        return@launch
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column {
+                                        Text(engine.label, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                        Text(engine.name, fontSize = 9.sp, color = Color(0xFFB0BEC5))
+                                    }
+                                    if (isSelected) {
+                                        Text("✓ Aktif", fontSize = 11.sp, color = Color(0xFF80CBC4))
+                                    }
+                                }
+                            }
+                        }
+                        Text(
+                            text = "Pilih engine di sini dulu (misal VoxSherpa/NekoSpeak), baru pilih suaranya di bawah. App bakal INGET pilihan ini walau HP di-restart.",
+                            fontSize = 9.sp,
+                            color = Color(0xFF80CBC4)
+                        )
+                    }
+
+                    HorizontalDivider(color = Color(0xFF555555))
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -1472,6 +1552,8 @@ fun MainDashboardScreen() {
                             onClick = {
                                 com.example.data.TtsSpeaker.reconnectToSystemEngine(context)
                                 availableVoices = com.example.data.TtsSpeaker.getAvailableVoices()
+                                availableEngines = com.example.data.TtsSpeaker.getInstalledEngines()
+                                selectedEnginePackage = com.example.data.TtsSpeaker.getSelectedEnginePackage(context)
                             },
                             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
                         ) {

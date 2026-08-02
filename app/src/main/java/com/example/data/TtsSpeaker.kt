@@ -26,30 +26,80 @@ object TtsSpeaker {
     private var isReady = false
     private var pendingContext: Context? = null
 
+    private const val PREFS_NAME = "pet_tts_engine_prefs"
+    private const val KEY_ENGINE_PACKAGE = "selected_engine_package"
+
     fun init(context: Context) {
         if (tts != null) return
         pendingContext = context.applicationContext
-        tts = TextToSpeech(context.applicationContext) { status ->
+        val savedEngine = getSelectedEnginePackage(context)
+        connectToEngine(context, savedEngine)
+    }
+
+    /**
+     * Bikin instance TextToSpeech baru, terhubung ke engine tertentu.
+     * Kalau `enginePackage` null, biarin Android nebak default sendiri (perilaku lama) --
+     * tapi ini TERBUKTI GAK RELIABLE di beberapa HP (misal HyperOS), makanya begitu Master
+     * milih engine secara EKSPLISIT lewat dashboard, kita selalu pakai constructor 3-argumen
+     * yang maksa Android connect ke package itu persis, gak nebak-nebak lagi.
+     */
+    private fun connectToEngine(context: Context, enginePackage: String?) {
+        val ctx = context.applicationContext
+        val listener = TextToSpeech.OnInitListener { status ->
             if (status == TextToSpeech.SUCCESS) {
                 val result = tts?.setLanguage(Locale("id", "ID"))
-                // Kalau bahasa Indonesia tidak tersedia di device, fallback ke default device
                 if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
                     tts?.language = Locale.getDefault()
                 }
                 isReady = true
 
-                // Terapkan suara yang sudah pernah dipilih Master sebelumnya (kalau ada)
-                pendingContext?.let { ctx ->
-                    val savedVoiceName = NotificationVoiceSettings.getSelectedVoiceName(ctx)
-                    if (savedVoiceName != null) {
-                        val match = tts?.voices?.firstOrNull { it.name == savedVoiceName }
-                        if (match != null) {
-                            tts?.voice = match
-                        }
-                    }
+                val savedVoiceName = NotificationVoiceSettings.getSelectedVoiceName(ctx)
+                if (savedVoiceName != null) {
+                    val match = tts?.voices?.firstOrNull { it.name == savedVoiceName }
+                    if (match != null) tts?.voice = match
                 }
+            } else {
+                isReady = false
             }
         }
+        tts = if (enginePackage != null) {
+            TextToSpeech(ctx, listener, enginePackage)
+        } else {
+            TextToSpeech(ctx, listener)
+        }
+    }
+
+    /**
+     * Daftar SEMUA engine TTS yang terpasang di HP ini (nama package + label yang kelihatan
+     * di Settings, misal "VoxSherpa TTS", "Google Text-to-speech", dll). Perlu instance TTS
+     * yang udah ke-init dulu (apapun engine-nya) buat query daftar ini -- jadi kalau belum
+     * pernah init() sama sekali, hasilnya kosong.
+     */
+    fun getInstalledEngines(): List<TextToSpeech.EngineInfo> {
+        return tts?.engines ?: emptyList()
+    }
+
+    fun getSelectedEnginePackage(context: Context): String? {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getString(KEY_ENGINE_PACKAGE, null)
+    }
+
+    /**
+     * Pindah SECARA EKSPLISIT ke engine tertentu (by package name), disimpen permanen
+     * biar dipakai lagi otomatis pas app dibuka ulang. Ini beda dari reconnectToSystemEngine()
+     * yang cuma nebak ulang default sistem -- ini maksa connect ke package yang Master
+     * pilih sendiri, jadi PASTI kepakai walau deteksi "default engine" Android lagi ngaco.
+     */
+    fun switchToEngine(context: Context, enginePackage: String) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_ENGINE_PACKAGE, enginePackage)
+            .apply()
+        tts?.stop()
+        tts?.shutdown()
+        tts = null
+        isReady = false
+        connectToEngine(context, enginePackage)
     }
 
     /**
@@ -130,13 +180,16 @@ object TtsSpeaker {
     }
 
     /**
-     * Maksa putus & nyambung ulang ke engine TTS -- dipakai kalau Master baru aja ganti
-     * "Preferred engine" TTS di Settings HP (misal ke NekoSpeak/Sherpa-ONNX), soalnya
-     * koneksi TTS yang lama nempel terus ke engine LAMA (Google TTS bawaan HP) selama
-     * service masih hidup di background, gak otomatis pindah sendiri.
+     * Maksa putus & nyambung ulang ke engine TTS -- kalau Master udah pernah milih engine
+     * eksplisit lewat dashboard, ini bakal connect ke situ lagi. Kalau belum pernah milih
+     * sama sekali, coba nebak default sistem (perilaku lama, gak selalu reliable).
      */
     fun reconnectToSystemEngine(context: Context) {
-        shutdown()
-        init(context)
+        val saved = getSelectedEnginePackage(context)
+        tts?.stop()
+        tts?.shutdown()
+        tts = null
+        isReady = false
+        connectToEngine(context, saved)
     }
 }
