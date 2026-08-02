@@ -70,13 +70,28 @@ object TtsSpeaker {
     }
 
     /**
-     * Daftar SEMUA engine TTS yang terpasang di HP ini (nama package + label yang kelihatan
-     * di Settings, misal "VoxSherpa TTS", "Google Text-to-speech", dll). Perlu instance TTS
-     * yang udah ke-init dulu (apapun engine-nya) buat query daftar ini -- jadi kalau belum
-     * pernah init() sama sekali, hasilnya kosong.
+     * Daftar SEMUA engine TTS yang terpasang di HP ini. Query LANGSUNG ke PackageManager
+     * (bukan lewat `tts.engines` bawaan API TextToSpeech) -- soalnya `tts.engines` ternyata
+     * GAK RELIABLE nemuin sebagian engine third-party (misal VoxSherpa) yang metadata-nya
+     * gak lengkap sesuai yang diharapkan API tinggi itu, walau enginenya beneran terinstall
+     * & jalan normal kalau ditest langsung dari Settings HP.
      */
-    fun getInstalledEngines(): List<TextToSpeech.EngineInfo> {
-        return tts?.engines ?: emptyList()
+    fun getInstalledEngines(context: Context): List<Pair<String, String>> {
+        val pm = context.packageManager
+        val intent = android.content.Intent("android.intent.action.TTS_SERVICE")
+        val resolveInfos = try {
+            pm.queryIntentServices(intent, android.content.pm.PackageManager.GET_META_DATA)
+        } catch (e: Exception) {
+            emptyList()
+        }
+        return resolveInfos
+            .mapNotNull { info ->
+                val packageName = info.serviceInfo?.packageName ?: return@mapNotNull null
+                val label = info.loadLabel(pm)?.toString() ?: packageName
+                label to packageName
+            }
+            .distinctBy { it.second }
+            .sortedBy { it.first }
     }
 
     fun getSelectedEnginePackage(context: Context): String? {

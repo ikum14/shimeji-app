@@ -180,20 +180,13 @@ fun MainDashboardScreen() {
     var bubbleFontSize by remember { mutableFloatStateOf(com.example.data.BubbleSettings.fontSizeSp.value) }
     var availableVoices by remember { mutableStateOf<List<android.speech.tts.Voice>>(emptyList()) }
     var selectedVoiceName by remember { mutableStateOf(com.example.data.NotificationVoiceSettings.getSelectedVoiceName(context)) }
-    var availableEngines by remember { mutableStateOf<List<android.speech.tts.TextToSpeech.EngineInfo>>(emptyList()) }
+    var availableEngines by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
     var selectedEnginePackage by remember { mutableStateOf(com.example.data.TtsSpeaker.getSelectedEnginePackage(context)) }
     val ttsCoroutineScope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
         com.example.data.TtsSpeaker.init(context)
-        repeat(10) {
-            val engines = com.example.data.TtsSpeaker.getInstalledEngines()
-            if (engines.isNotEmpty()) {
-                availableEngines = engines
-                return@LaunchedEffect
-            }
-            kotlinx.coroutines.delay(400)
-        }
+        availableEngines = com.example.data.TtsSpeaker.getInstalledEngines(context)
     }
 
     LaunchedEffect(Unit) {
@@ -1489,7 +1482,8 @@ fun MainDashboardScreen() {
                     } else {
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             availableEngines.forEach { engine ->
-                                val isSelected = engine.name == selectedEnginePackage
+                                val (engineLabel, enginePackage) = engine
+                                val isSelected = enginePackage == selectedEnginePackage
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -1498,8 +1492,8 @@ fun MainDashboardScreen() {
                                             RoundedCornerShape(10.dp)
                                         )
                                         .clickable {
-                                            com.example.data.TtsSpeaker.switchToEngine(context, engine.name)
-                                            selectedEnginePackage = engine.name
+                                            com.example.data.TtsSpeaker.switchToEngine(context, enginePackage)
+                                            selectedEnginePackage = enginePackage
                                             availableVoices = emptyList()
                                             selectedVoiceName = null
                                             ttsCoroutineScope.launch {
@@ -1518,8 +1512,8 @@ fun MainDashboardScreen() {
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Column {
-                                        Text(engine.label, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                                        Text(engine.name, fontSize = 9.sp, color = Color(0xFFB0BEC5))
+                                        Text(engineLabel, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                        Text(enginePackage, fontSize = 9.sp, color = Color(0xFFB0BEC5))
                                     }
                                     if (isSelected) {
                                         Text("✓ Aktif", fontSize = 11.sp, color = Color(0xFF80CBC4))
@@ -1552,7 +1546,7 @@ fun MainDashboardScreen() {
                             onClick = {
                                 com.example.data.TtsSpeaker.reconnectToSystemEngine(context)
                                 availableVoices = com.example.data.TtsSpeaker.getAvailableVoices()
-                                availableEngines = com.example.data.TtsSpeaker.getInstalledEngines()
+                                availableEngines = com.example.data.TtsSpeaker.getInstalledEngines(context)
                                 selectedEnginePackage = com.example.data.TtsSpeaker.getSelectedEnginePackage(context)
                             },
                             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
