@@ -146,40 +146,60 @@ object TtsSpeaker {
     fun speak(text: String) {
         if (!isReady || text.isBlank()) return
         val ctx = pendingContext
-        if (ctx != null && PetVoiceSettings.isMuted(ctx)) return // Master lagi mute-in suara pet
+        if (ctx == null || PetVoiceSettings.isMuted(ctx)) return // Master lagi mute-in suara pet
 
-        val cleanText = sanitizeForSpeech(text)
-        if (cleanText.isBlank()) return
+        tts?.setPitch(TtsVoiceSettings.getPitch(ctx))
+        tts?.setSpeechRate(TtsVoiceSettings.getSpeed(ctx))
 
+        val pauseAtEmoji = TtsVoiceSettings.getPauseAtEmoji(ctx)
+        val segments = buildSpeechSegments(text, pauseAtEmoji)
+        if (segments.isEmpty()) return
+
+        val pauseMs = TtsVoiceSettings.getPauseMs(ctx)
         val params = Bundle().apply {
             putInt(TextToSpeech.Engine.KEY_PARAM_STREAM, AudioManager.STREAM_NOTIFICATION)
         }
-        tts?.speak(cleanText, TextToSpeech.QUEUE_ADD, params, System.currentTimeMillis().toString())
+        val baseId = System.currentTimeMillis().toString()
+        segments.forEachIndexed { index, segment ->
+            tts?.speak(segment, TextToSpeech.QUEUE_ADD, params, "$baseId-$index")
+            if (pauseMs > 0 && index != segments.lastIndex) {
+                tts?.playSilentUtterance(pauseMs, TextToSpeech.QUEUE_ADD, "$baseId-$index-pause")
+            }
+        }
     }
 
     /**
-     * Bersihin simbol-simbol dekoratif dari teks sebelum dikirim ke TTS, soalnya kalau
-     * gak dibersihin, engine TTS (apapun -- lokal, ElevenLabs, Google Cloud, dll) bakal
-     * baca simbolnya literal (misal "~" dibaca "gelombang", "*" dibaca "asterisk", kaomoji
-     * kayak "( •`.•` )" dibaca acak-acakan). Teks ASLI tetap dipakai buat tampilan bubble --
-     * ini cuma versi yang dikirim ke suara doang.
-     *
-     * Strateginya WHITELIST (bukan buang satu-satu simbol yang ketauan bermasalah, soalnya
-     * gak bakal pernah kekejar semua kemungkinan): cuma pertahanin huruf, angka, spasi, dan
-     * tanda baca kalimat dasar. Apapun di luar itu (emoji, kaomoji, asterisk, tilde, dll)
-     * otomatis kebuang, apapun bentuknya.
+     * Pecah teks jadi beberapa segmen yang dipisah tempat-tempat yang butuh jeda:
+     * (1) tiap ketemu akhir kalimat (. ! ?), (2) tiap ketemu simbol/emoji yang dibuang
+     * (kalau `pauseAtEmoji` aktif) -- biar "beat" emosinya masih kerasa walau emoji-nya
+     * sendiri gak dibaca literal (gak ada TTS yang bisa baca emoji dengan benar).
+     * Ini WHITELIST filter: cuma huruf, angka, spasi, & tanda baca dasar yang dipertahanin,
+     * sisanya (simbol/emoji/kaomoji apapun bentuknya) otomatis jadi titik pisah segmen.
      */
-    private fun sanitizeForSpeech(text: String): String {
-        var cleaned = text
-            .replace(Regex("[^\\p{L}\\p{N}\\s.,!?'-]"), "")
-            .replace(Regex("\\s+"), " ")
-            .trim()
-        // Kalau abis dibersihin cuma nyisain tanda baca doang (misal sisa kaomoji yang
-        // udah dikupas simbolnya), anggap kosong -- daripada TTS baca "titik" sendirian.
-        if (cleaned.isNotBlank() && cleaned.none { it.isLetterOrDigit() }) {
-            cleaned = ""
+    private fun buildSpeechSegments(rawText: String, pauseAtEmoji: Boolean): List<String> {
+        val sentenceEnders = setOf('.', '!', '?')
+        val allowedPunctuation = setOf(',', '.', '!', '?', '\'', '-')
+        val segments = mutableListOf<String>()
+        var current = StringBuilder()
+
+        for (ch in rawText) {
+            val isAllowed = ch.isLetterOrDigit() || ch.isWhitespace() || ch in allowedPunctuation
+            if (isAllowed) {
+                current.append(ch)
+                if (ch in sentenceEnders) {
+                    segments.add(current.toString())
+                    current = StringBuilder()
+                }
+            } else if (pauseAtEmoji && current.isNotBlank()) {
+                segments.add(current.toString())
+                current = StringBuilder()
+            }
         }
-        return cleaned
+        if (current.isNotBlank()) segments.add(current.toString())
+
+        return segments
+            .map { it.replace(Regex("\\s+"), " ").trim() }
+            .filter { it.isNotBlank() && it.any { c -> c.isLetterOrDigit() } }
     }
 
     /** Coba baca 1 kalimat contoh pakai suara yang lagi aktif, buat preview di UI. */

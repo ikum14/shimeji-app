@@ -183,6 +183,10 @@ fun MainDashboardScreen() {
     var availableEngines by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
     var selectedEnginePackage by remember { mutableStateOf(com.example.data.TtsSpeaker.getSelectedEnginePackage(context)) }
     val ttsCoroutineScope = rememberCoroutineScope()
+    var ttsPitch by remember { mutableFloatStateOf(com.example.data.TtsVoiceSettings.getPitch(context)) }
+    var ttsSpeed by remember { mutableFloatStateOf(com.example.data.TtsVoiceSettings.getSpeed(context)) }
+    var ttsPauseMs by remember { mutableFloatStateOf(com.example.data.TtsVoiceSettings.getPauseMs(context).toFloat()) }
+    var ttsPauseAtEmoji by remember { mutableStateOf(com.example.data.TtsVoiceSettings.getPauseAtEmoji(context)) }
 
     LaunchedEffect(Unit) {
         com.example.data.TtsSpeaker.init(context)
@@ -1613,6 +1617,113 @@ fun MainDashboardScreen() {
                         ) {
                             Text("▶️ Coba Dengar Suara Ini", fontSize = 11.sp)
                         }
+                    }
+                }
+            }
+
+            // 🎚️ Pengaturan Suara TTS Card (pitch, speed, jeda, emoji) -- berlaku ke SEMUA
+            // engine (Google TTS, VoxSherpa, NekoSpeak, dll), soalnya ini API standar Android.
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF263238)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = "🎚️ Pengaturan Suara",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    Text(
+                        text = "Berlaku ke semua engine TTS (bukan cuma satu tertentu)",
+                        fontSize = 10.sp,
+                        color = Color(0xFFB0BEC5)
+                    )
+
+                    // Pitch
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("🎵 Tinggi Nada (Pitch)", fontSize = 12.sp, color = Color.White)
+                        Text("%.2fx".format(ttsPitch), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF80CBC4))
+                    }
+                    Slider(
+                        value = ttsPitch,
+                        onValueChange = {
+                            ttsPitch = it
+                            com.example.data.TtsVoiceSettings.setPitch(context, it)
+                        },
+                        valueRange = com.example.data.TtsVoiceSettings.MIN_PITCH..com.example.data.TtsVoiceSettings.MAX_PITCH
+                    )
+
+                    // Speed
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("⏩ Kecepatan Bicara (Speed)", fontSize = 12.sp, color = Color.White)
+                        Text("%.2fx".format(ttsSpeed), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF80CBC4))
+                    }
+                    Slider(
+                        value = ttsSpeed,
+                        onValueChange = {
+                            ttsSpeed = it
+                            com.example.data.TtsVoiceSettings.setSpeed(context, it)
+                        },
+                        valueRange = com.example.data.TtsVoiceSettings.MIN_SPEED..com.example.data.TtsVoiceSettings.MAX_SPEED
+                    )
+
+                    // Jeda antar kalimat
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("⏸️ Jeda Antar Kalimat", fontSize = 12.sp, color = Color.White)
+                        Text("${ttsPauseMs.toInt()} ms", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF80CBC4))
+                    }
+                    Slider(
+                        value = ttsPauseMs,
+                        onValueChange = {
+                            ttsPauseMs = it
+                            com.example.data.TtsVoiceSettings.setPauseMs(context, it)
+                        },
+                        valueRange = com.example.data.TtsVoiceSettings.MIN_PAUSE_MS..com.example.data.TtsVoiceSettings.MAX_PAUSE_MS
+                    )
+                    Text(
+                        text = "Jeda ditambahin tiap ketemu titik/tanya/seru pas pet ngomong",
+                        fontSize = 10.sp,
+                        color = Color(0xFFB0BEC5)
+                    )
+
+                    HorizontalDivider(color = Color(0xFF555555))
+
+                    // Toggle jeda di posisi emoji
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("😊 Jeda di Posisi Emoji", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            Text(
+                                text = "Emoji/kaomoji selalu dibuang (gak ada TTS yang bisa bacanya bener), tapi bisa dikasih jeda kecil di posisinya biar 'beat' emosinya masih kerasa",
+                                fontSize = 10.sp,
+                                color = Color(0xFFB0BEC5)
+                            )
+                        }
+                        Switch(
+                            checked = ttsPauseAtEmoji,
+                            onCheckedChange = {
+                                ttsPauseAtEmoji = it
+                                com.example.data.TtsVoiceSettings.setPauseAtEmoji(context, it)
+                            }
+                        )
                     }
                 }
             }
