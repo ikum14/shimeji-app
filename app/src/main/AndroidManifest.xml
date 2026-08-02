@@ -4,7 +4,7 @@
 
     <!-- Wajib sejak Android 11 (API 30): tanpa ini, app GAK BISA "lihat" app TTS pihak
          ketiga (misal VoxSherpa, NekoSpeak) lewat PackageManager query, walau kodenya
-         query dengan benar -- hasilnya disaring sistem, cuma app TTS bawaan sistem
+         query dengan benar  hasilnya disaring sistem, cuma app TTS bawaan sistem
          (Google TTS) yang lolos. Ini penyebab kenapa cuma Google TTS yang kedeteksi
          selama ini. -->
     <queries>
