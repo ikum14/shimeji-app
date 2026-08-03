@@ -48,6 +48,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -234,6 +235,26 @@ fun MainDashboardScreen() {
                 Toast.makeText(context, "Gagal mengimpor gambar/GIF dari galeri.", Toast.LENGTH_SHORT).show()
             }
         }
+    }
+
+    LaunchedEffect(Unit) {
+        com.example.model.PoseSpriteManager.init(context)
+    }
+    val poseFiles by com.example.model.PoseSpriteManager.poseFiles.collectAsState()
+    var pendingPoseSlot by remember { mutableStateOf<com.example.model.PoseSpriteManager.PoseSlot?>(null) }
+    val poseSpriteLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: android.net.Uri? ->
+        val slot = pendingPoseSlot
+        if (uri != null && slot != null) {
+            val success = com.example.model.PoseSpriteManager.addPoseImage(context, slot, uri)
+            Toast.makeText(
+                context,
+                if (success) "✅ Gambar ditambahin ke '${slot.label}'!" else "Gagal upload gambar.",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+        pendingPoseSlot = null
     }
 
     fun gantiKostum(namaKostum: String) {
@@ -770,6 +791,104 @@ fun MainDashboardScreen() {
                             }
                         }
                     }
+                }
+            }
+
+            // 🎬 Pose Kustom Card -- upload gambar/GIF per pose (idle/hide/tap/drag),
+            // beda dari kostum biasa (yang cuma satu gambar buat semuanya).
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF263238)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = "🎬 Pose Kustom",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    Text(
+                        text = "Upload beberapa gambar per momen (idle/hide/tap/drag) -- salah satunya dipilih RANDOM tiap dipakai, biar lebih variatif. Slot kosong otomatis pakai sprite default.",
+                        fontSize = 10.sp,
+                        color = Color(0xFFB0BEC5)
+                    )
+
+                    com.example.model.PoseSpriteManager.PoseSlot.entries
+                        .groupBy { it.group }
+                        .forEach { (groupName, slots) ->
+                            Text(
+                                text = groupName,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF80CBC4)
+                            )
+                            slots.forEach { slot ->
+                                val filledPaths = poseFiles[slot.key] ?: emptyList()
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(Color(0xFF1E1E1E), RoundedCornerShape(10.dp))
+                                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "${slot.label} (${filledPaths.size})",
+                                            fontSize = 12.sp,
+                                            color = Color.White,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        OutlinedButton(
+                                            onClick = {
+                                                pendingPoseSlot = slot
+                                                poseSpriteLauncher.launch("image/*")
+                                            },
+                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                                        ) {
+                                            Text("+ Tambah", fontSize = 10.sp)
+                                        }
+                                    }
+                                    if (filledPaths.isNotEmpty()) {
+                                        androidx.compose.foundation.lazy.LazyRow(
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            items(filledPaths) { path ->
+                                                Box {
+                                                    coil.compose.AsyncImage(
+                                                        model = path,
+                                                        contentDescription = slot.label,
+                                                        modifier = Modifier
+                                                            .size(56.dp)
+                                                            .background(Color(0xFF37474F), RoundedCornerShape(8.dp))
+                                                    )
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .align(Alignment.TopEnd)
+                                                            .size(20.dp)
+                                                            .background(Color(0xCC000000), RoundedCornerShape(50))
+                                                            .clickable {
+                                                                com.example.model.PoseSpriteManager.removePoseImage(context, slot, path)
+                                                            },
+                                                        contentAlignment = Alignment.Center
+                                                    ) {
+                                                        Text("✕", fontSize = 10.sp, color = Color.White)
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                 }
             }
 

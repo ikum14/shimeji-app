@@ -84,6 +84,8 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     private var behaviorJob: Job? = null
 
     private var isDragging = false
+    private var isDraggingBerontak = false // udah ganti pose berontak apa belum (biar gak load ulang tiap ACTION_MOVE)
+    private val DRAG_BERONTAK_THRESHOLD_MS = 3000L
     private var isFalling = false
     private var isPetHidden = false
 
@@ -116,6 +118,12 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         set(value) {
             field = value
             bubbleMoodState.value = value
+            val slot = when (value) {
+                "Bosan" -> com.example.model.PoseSpriteManager.PoseSlot.IDLE_NGANTUK
+                "Kesal" -> com.example.model.PoseSpriteManager.PoseSlot.IDLE_TIDUR
+                else -> com.example.model.PoseSpriteManager.PoseSlot.IDLE_DIAM
+            }
+            if (!isDragging && !isPetHidden) updatePetSpriteForPose(slot)
         }
     private var lastInteractionTimestamp = System.currentTimeMillis()
 
@@ -146,6 +154,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         com.example.data.TtsSpeaker.init(applicationContext)
         com.example.data.PetQuoteSettings.ensureTemplateExists()
         com.example.data.BubbleStyleSettings.init(applicationContext)
+        com.example.model.PoseSpriteManager.init(applicationContext)
         updatePetSprite(held = false) // Terapkan kostum tersimpan begitu overlay muncul
         serviceScope.launch {
             com.example.model.CostumeManager.kostumAktif.collect {
@@ -427,6 +436,28 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         }
     }
 
+    /**
+     * Tampilin gambar buat SATU pose spesifik (idle/tap/drag/hide), kalau Master udah
+     * upload gambar custom buat slot itu. Kalau belum diisi, otomatis fallback ke sprite
+     * default (updatePetSprite biasa) -- jadi aman dipanggil kapan aja walau belum semua
+     * slot keisi.
+     */
+    private fun updatePetSpriteForPose(slot: com.example.model.PoseSpriteManager.PoseSlot, fallbackHeld: Boolean = false) {
+        val iv = petImage ?: return
+        val customPath = com.example.model.PoseSpriteManager.getRandomPoseImagePath(slot)
+        if (customPath != null && java.io.File(customPath).exists()) {
+            val loader = coil.ImageLoader(applicationContext)
+            val request = coil.request.ImageRequest.Builder(applicationContext)
+                .data(customPath)
+                .target(iv)
+                .crossfade(true)
+                .build()
+            loader.enqueue(request)
+        } else {
+            updatePetSprite(held = fallbackHeld)
+        }
+    }
+
     private fun listenForNotificationBus() {
         serviceScope.launch {
             NotificationBus.notifications.collect { incoming ->
@@ -623,6 +654,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                         clickTime = System.currentTimeMillis()
                         fallingJob?.cancel()
                         isDragging = true
+                        isDraggingBerontak = false
                         isFalling = false
                         behaviorState = PetBehaviorState.IDLE
                         behaviorTicksRemaining = 0
@@ -632,7 +664,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                         initialTouchX = event.rawX
                         initialTouchY = event.rawY
 
-                        updatePetSprite(held = true)
+                        updatePetSpriteForPose(com.example.model.PoseSpriteManager.PoseSlot.DRAG_PASRAH, fallbackHeld = true)
                         speakBubble(com.example.data.PetQuoteSettings.getQuote("drag", PetQuotes.dragQuotes))
                         return true
                     }
@@ -642,6 +674,12 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                             p.x = initialX + (event.rawX - initialTouchX).toInt()
                             p.y = initialY + (event.rawY - initialTouchY).toInt()
                             windowManager.updateViewLayout(overlayView, p)
+
+                            // Kelamaan di-drag -> ganti pose jadi berontak (cuma sekali)
+                            if (!isDraggingBerontak && System.currentTimeMillis() - clickTime > DRAG_BERONTAK_THRESHOLD_MS) {
+                                isDraggingBerontak = true
+                                updatePetSpriteForPose(com.example.model.PoseSpriteManager.PoseSlot.DRAG_BERONTAK, fallbackHeld = true)
+                            }
                         }
                         return true
                     }
@@ -654,8 +692,13 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                         val deltaY = abs(event.rawY - initialTouchY)
 
                         if (duration < 200 && deltaX < 15 && deltaY < 15) {
-                            // Pet Tapped
-                            updatePetSprite(held = false)
+                            // Pet Tapped -- pose reaksi acak, ringan atau berlebihan
+                            val tapSlot = if ((0..1).random() == 0) {
+                                com.example.model.PoseSpriteManager.PoseSlot.TAP_RINGAN
+                            } else {
+                                com.example.model.PoseSpriteManager.PoseSlot.TAP_BERLEBIHAN
+                            }
+                            updatePetSpriteForPose(tapSlot, fallbackHeld = false)
                             speakBubble(com.example.data.PetQuoteSettings.getQuote("tap", PetQuotes.tapQuotes))
                             handleUserInteraction(5)
                             behaviorState = PetBehaviorState.IDLE
@@ -663,7 +706,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                             requestSmartDialog("tap")
                         } else {
                             // Released after drag -> tetap diam di titik itu (nggak jatuh lagi, atas request Master)
-                            updatePetSprite(held = false)
+                            updatePetSpriteForPose(com.example.model.PoseSpriteManager.PoseSlot.IDLE_DIAM, fallbackHeld = false)
                             handleUserInteraction(2)
                             behaviorState = PetBehaviorState.IDLE
                             behaviorTicksRemaining = 0
@@ -785,6 +828,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     private fun peekAndReveal() {
         if (!isPetHidden) return
         peekJob?.cancel()
+        updatePetSpriteForPose(com.example.model.PoseSpriteManager.PoseSlot.HIDE_NGINTIP)
         petImage?.visibility = View.VISIBLE
         speechCard?.visibility = View.VISIBLE
         peekJob = serviceScope.launch {
@@ -800,15 +844,46 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         isPetHidden = !isPetHidden
         peekJob?.cancel()
         if (isPetHidden) {
-            speechCard?.visibility = View.GONE
-            petImage?.visibility = View.GONE
             hideButton?.visibility = View.GONE
             showButtonPill?.visibility = View.VISIBLE
+            val tutupPintuPath = com.example.model.PoseSpriteManager.getRandomPoseImagePath(
+                com.example.model.PoseSpriteManager.PoseSlot.HIDE_TUTUP_PINTU
+            )
+            if (tutupPintuPath != null) {
+                // Ada aset transisi tutup pintu -> tampilin sebentar dulu, baru sembunyi
+                updatePetSpriteForPose(com.example.model.PoseSpriteManager.PoseSlot.HIDE_TUTUP_PINTU)
+                serviceScope.launch {
+                    delay(500L)
+                    if (isPetHidden) {
+                        speechCard?.visibility = View.GONE
+                        petImage?.visibility = View.GONE
+                    }
+                }
+            } else {
+                // Belum ada aset transisi -> langsung sembunyi kayak biasa
+                speechCard?.visibility = View.GONE
+                petImage?.visibility = View.GONE
+            }
         } else {
             speechCard?.visibility = View.VISIBLE
             petImage?.visibility = View.VISIBLE
             hideButton?.visibility = View.VISIBLE
             showButtonPill?.visibility = View.GONE
+            val bukaPintuPath = com.example.model.PoseSpriteManager.getRandomPoseImagePath(
+                com.example.model.PoseSpriteManager.PoseSlot.HIDE_BUKA_PINTU
+            )
+            if (bukaPintuPath != null) {
+                // Ada aset transisi buka pintu -> tampilin sebentar, baru balik ke idle normal
+                updatePetSpriteForPose(com.example.model.PoseSpriteManager.PoseSlot.HIDE_BUKA_PINTU)
+                serviceScope.launch {
+                    delay(500L)
+                    if (!isPetHidden) {
+                        updatePetSpriteForPose(com.example.model.PoseSpriteManager.PoseSlot.IDLE_DIAM)
+                    }
+                }
+            } else {
+                updatePetSpriteForPose(com.example.model.PoseSpriteManager.PoseSlot.IDLE_DIAM)
+            }
             speakBubble("Halo lagi, Master!")
         }
     }
