@@ -866,6 +866,7 @@ fun MainDashboardScreen() {
                                                     coil.compose.AsyncImage(
                                                         model = path,
                                                         contentDescription = slot.label,
+                                                        imageLoader = com.example.data.GifAwareImageLoader.get(context),
                                                         modifier = Modifier
                                                             .size(56.dp)
                                                             .background(Color(0xFF37474F), RoundedCornerShape(8.dp))

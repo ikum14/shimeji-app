@@ -424,7 +424,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
         if (effectiveId.startsWith("http") || effectiveId.contains("/")) {
             // Kostum kustom dari galeri HP atau URL -> load pakai Coil
-            val loader = coil.ImageLoader(applicationContext)
+            val loader = com.example.data.GifAwareImageLoader.get(applicationContext)
             val request = coil.request.ImageRequest.Builder(applicationContext)
                 .data(effectiveId)
                 .target(iv)
@@ -446,7 +446,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         val iv = petImage ?: return
         val customPath = com.example.model.PoseSpriteManager.getRandomPoseImagePath(slot)
         if (customPath != null && java.io.File(customPath).exists()) {
-            val loader = coil.ImageLoader(applicationContext)
+            val loader = com.example.data.GifAwareImageLoader.get(applicationContext)
             val request = coil.request.ImageRequest.Builder(applicationContext)
                 .data(customPath)
                 .target(iv)

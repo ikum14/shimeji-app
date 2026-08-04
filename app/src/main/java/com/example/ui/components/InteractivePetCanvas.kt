@@ -685,6 +685,7 @@ fun InteractivePetCanvas(
                             AsyncImage(
                                 model = effectiveCostume,
                                 contentDescription = "Chibi Pet Avatar Network URL",
+                                imageLoader = com.example.data.GifAwareImageLoader.get(context),
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .shadow(if (isDragging) 12.dp else 4.dp, CircleShape)
@@ -696,6 +697,7 @@ fun InteractivePetCanvas(
                             AsyncImage(
                                 model = java.io.File(effectiveCostume),
                                 contentDescription = "Custom Pet Avatar Galeri",
+                                imageLoader = com.example.data.GifAwareImageLoader.get(context),
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .shadow(if (isDragging) 12.dp else 4.dp, CircleShape)
