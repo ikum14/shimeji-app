@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -744,48 +745,70 @@ fun MainDashboardScreen() {
                     ) {
                         items(listKarakter) { item ->
                             val isSelected = kostumAktif == item.id
-                            Surface(
-                                shape = RoundedCornerShape(14.dp),
-                                color = if (isSelected) Color(0xFF636363) else Color.White,
-                                shadowElevation = if (isSelected) 6.dp else 2.dp,
-                                modifier = Modifier
-                                    .border(
-                                        width = if (isSelected) 2.dp else 1.dp,
-                                        color = if (isSelected) Color(0xFF525252) else Color.LightGray,
-                                        shape = RoundedCornerShape(14.dp)
-                                    )
-                                    .clip(RoundedCornerShape(14.dp))
-                            ) {
-                                Button(
-                                    onClick = { gantiKostum(item.id) },
+                            Box {
+                                Surface(
                                     shape = RoundedCornerShape(14.dp),
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = if (isSelected) Color(0xFF636363) else Color.White
-                                    ),
-                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                                        horizontal = 12.dp,
-                                        vertical = 8.dp
-                                    )
+                                    color = if (isSelected) Color(0xFF636363) else Color.White,
+                                    shadowElevation = if (isSelected) 6.dp else 2.dp,
+                                    modifier = Modifier
+                                        .border(
+                                            width = if (isSelected) 2.dp else 1.dp,
+                                            color = if (isSelected) Color(0xFF525252) else Color.LightGray,
+                                            shape = RoundedCornerShape(14.dp)
+                                        )
+                                        .clip(RoundedCornerShape(14.dp))
                                 ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    Button(
+                                        onClick = { gantiKostum(item.id) },
+                                        shape = RoundedCornerShape(14.dp),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = if (isSelected) Color(0xFF636363) else Color.White
+                                        ),
+                                        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                                            horizontal = 12.dp,
+                                            vertical = 8.dp
+                                        )
                                     ) {
-                                        Text(
-                                            text = if (item.isCustom) "🖼️" else when (item.id) {
-                                                "baju_sekolah" -> "🏫"
-                                                "gaun_pesta" -> "👑"
-                                                "piyama" -> "🌙"
-                                                else -> "🌸"
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Text(
+                                                text = if (item.isCustom) "🖼️" else when (item.id) {
+                                                    "baju_sekolah" -> "🏫"
+                                                    "gaun_pesta" -> "👑"
+                                                    "piyama" -> "🌙"
+                                                    else -> "🌸"
+                                                },
+                                                fontSize = 12.sp
+                                            )
+                                            Text(
+                                                text = item.name,
+                                                fontSize = 11.sp,
+                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                                color = if (isSelected) Color.White else Color.DarkGray
+                                            )
+                                        }
+                                    }
+                                }
+                                // Tombol hapus -- cuma nongol buat karakter yang Master upload sendiri
+                                // dari galeri (customFilePath != null), bukan kostum bawaan/hadiah unlock
+                                if (item.customFilePath != null) {
+                                    Box(
+                                        modifier = Modifier
+                                            .align(Alignment.TopEnd)
+                                            .offset(x = 6.dp, y = (-6).dp)
+                                            .size(20.dp)
+                                            .background(Color(0xFFD32F2F), RoundedCornerShape(50))
+                                            .clickable {
+                                                val wasDeleted = com.example.model.CostumeManager.hapusKarakter(context, item)
+                                                if (wasDeleted) {
+                                                    Toast.makeText(context, "Karakter '${item.name}' dihapus", Toast.LENGTH_SHORT).show()
+                                                }
                                             },
-                                            fontSize = 12.sp
-                                        )
-                                        Text(
-                                            text = item.name,
-                                            fontSize = 11.sp,
-                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                            color = if (isSelected) Color.White else Color.DarkGray
-                                        )
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text("✕", fontSize = 10.sp, color = Color.White, fontWeight = FontWeight.Bold)
                                     }
                                 }
                             }

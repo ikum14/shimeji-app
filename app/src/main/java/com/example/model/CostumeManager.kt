@@ -179,6 +179,27 @@ object CostumeManager {
         return newItem
     }
 
+    /**
+     * Hapus karakter kustom yang di-upload Master dari galeri. Cuma bisa hapus item yang
+     * PUNYA customFilePath (hasil upload galeri) -- kostum bawaan app & hadiah unlock
+     * (misal Mahkota Juara) gak bisa dihapus dari sini, soalnya itu bukan file lokal
+     * yang Master upload, tapi bagian tetap dari app / hasil progress game.
+     */
+    fun hapusKarakter(context: Context, item: CostumeItem): Boolean {
+        if (item.customFilePath == null) return false
+        return try {
+            File(item.customFilePath).delete()
+            _listKarakter.value = _listKarakter.value.filter { it.id != item.id }
+            if (_kostumAktif.value == item.id) {
+                _kostumAktif.value = "default" // kostum yang dihapus lagi dipakai -> balik ke default
+            }
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Gagal hapus karakter kustom", e)
+            false
+        }
+    }
+
     fun getCostumeDisplayName(namaKostum: String): String {
         val found = _listKarakter.value.find { it.id == namaKostum }
         if (found != null) return found.name
