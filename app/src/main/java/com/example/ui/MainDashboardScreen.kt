@@ -216,6 +216,7 @@ fun MainDashboardScreen() {
 
     LaunchedEffect(Unit) {
         CostumeManager.initKarakter(context)
+        CostumeManager.initUnlockSlots(context)
         val mem = com.example.data.ObsidianMemoryManager.loadMemoryFromObsidian(context)
         biodataInputText = mem.rawContent
     }
@@ -256,6 +257,24 @@ fun MainDashboardScreen() {
             ).show()
         }
         pendingPoseSlot = null
+    }
+
+    // 🎁 Hadiah Unlock -- 3 slot gambar buat evolusi kostum & Mahkota Juara
+    val unlockImages by CostumeManager.unlockImages.collectAsState()
+    var pendingUnlockSlot by remember { mutableStateOf<CostumeManager.UnlockSlot?>(null) }
+    val unlockSlotLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: android.net.Uri? ->
+        val slot = pendingUnlockSlot
+        if (uri != null && slot != null) {
+            val success = CostumeManager.setUnlockImage(context, slot, uri)
+            Toast.makeText(
+                context,
+                if (success) "✅ Gambar hadiah '${slot.label}' disimpan!" else "Gagal upload gambar.",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+        pendingUnlockSlot = null
     }
 
     fun gantiKostum(namaKostum: String) {
@@ -791,9 +810,9 @@ fun MainDashboardScreen() {
                                         }
                                     }
                                 }
-                                // Tombol hapus -- cuma nongol buat karakter yang Master upload sendiri
-                                // dari galeri (customFilePath != null), bukan kostum bawaan/hadiah unlock
-                                if (item.customFilePath != null) {
+                                // Tombol hapus -- semua item lemari boleh dihapus (baik upload galeri
+                                // maupun kostum bawaan) KECUALI "Default Chibi" (fallback utama, wajib ada)
+                                if (item.id != "default") {
                                     Box(
                                         modifier = Modifier
                                             .align(Alignment.TopEnd)
@@ -804,6 +823,8 @@ fun MainDashboardScreen() {
                                                 val wasDeleted = com.example.model.CostumeManager.hapusKarakter(context, item)
                                                 if (wasDeleted) {
                                                     Toast.makeText(context, "Karakter '${item.name}' dihapus", Toast.LENGTH_SHORT).show()
+                                                } else {
+                                                    Toast.makeText(context, "'${item.name}' gak bisa dihapus dari sini", Toast.LENGTH_SHORT).show()
                                                 }
                                             },
                                         contentAlignment = Alignment.Center
@@ -913,6 +934,97 @@ fun MainDashboardScreen() {
                                 }
                             }
                         }
+                }
+            }
+
+            // 🎁 Hadiah Unlock Card -- 3 slot: 2 evolusi kostum (level 11-18 & 19+) + Mahkota Juara.
+            // Satu slot cuma nampung 1 gambar (beda dari Pose Kustom yang bisa banyak & random).
+            // Slot kosong otomatis fallback ke foto stok bawaan (lihat CostumeManager.getEffectiveCostumeUrlOrId).
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF263238)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = "🎁 Hadiah Unlock",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    Text(
+                        text = "Gambar yang muncul otomatis pas Chibi Pet naik level / menang Suwit 3x beruntun. Upload buat ganti foto stok bawaan yang gak sesuai.",
+                        fontSize = 10.sp,
+                        color = Color(0xFFB0BEC5)
+                    )
+
+                    CostumeManager.UnlockSlot.entries.forEach { slot ->
+                        val currentPath = unlockImages[slot.key]
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color(0xFF1E1E1E), RoundedCornerShape(10.dp))
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = slot.label,
+                                    fontSize = 12.sp,
+                                    color = Color.White,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                OutlinedButton(
+                                    onClick = {
+                                        pendingUnlockSlot = slot
+                                        unlockSlotLauncher.launch("image/*")
+                                    },
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                                ) {
+                                    Text(if (currentPath != null) "Ganti" else "+ Upload", fontSize = 10.sp)
+                                }
+                            }
+                            if (currentPath != null) {
+                                Box {
+                                    coil.compose.AsyncImage(
+                                        model = currentPath,
+                                        contentDescription = slot.label,
+                                        imageLoader = com.example.data.GifAwareImageLoader.get(context),
+                                        modifier = Modifier
+                                            .size(56.dp)
+                                            .background(Color(0xFF37474F), RoundedCornerShape(8.dp))
+                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .align(Alignment.TopEnd)
+                                            .size(20.dp)
+                                            .background(Color(0xCC000000), RoundedCornerShape(50))
+                                            .clickable {
+                                                CostumeManager.clearUnlockImage(context, slot)
+                                                Toast.makeText(context, "Gambar '${slot.label}' dihapus, balik ke foto bawaan.", Toast.LENGTH_SHORT).show()
+                                            },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text("✕", fontSize = 10.sp, color = Color.White)
+                                    }
+                                }
+                            } else {
+                                Text(
+                                    text = "Belum diupload -- pakai foto stok bawaan",
+                                    fontSize = 10.sp,
+                                    color = Color(0xFF78909C)
+                                )
+                            }
+                        }
+                    }
                 }
             }
 
