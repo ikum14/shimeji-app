@@ -708,6 +708,13 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                         initialTouchX = event.rawX
                         initialTouchY = event.rawY
 
+                        // Sinyal visual instan pas kesentuh -- biar keliatan sentuhannya "kehitung"
+                        // sementara masih nunggu DRAG_HOLD_THRESHOLD_MS, bukan diem gak ada respon.
+                        v?.animate()?.cancel()
+                        v?.animate()?.scaleX(0.92f)?.scaleY(0.92f)?.setDuration(120L)?.withEndAction {
+                            v.animate().scaleX(1f).scaleY(1f).setDuration(120L).start()
+                        }?.start()
+
                         // Belum langsung dianggap drag -- tunggu ditahan DRAG_HOLD_THRESHOLD_MS
                         // dulu, baru pose & kalimat drag muncul + posisi mulai ikut gerak.
                         // Sebelum itu, sentuhan masih bisa berakhir jadi tap biasa.
@@ -745,6 +752,9 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
                     MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                         holdJob?.cancel()
+                        v?.animate()?.cancel()
+                        v?.scaleX = 1f
+                        v?.scaleY = 1f
                         val wasDragging = isDragging
                         isDragging = false
                         val duration = System.currentTimeMillis() - clickTime
