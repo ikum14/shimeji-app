@@ -857,7 +857,7 @@ fun MainDashboardScreen() {
                         color = Color.White
                     )
                     Text(
-                        text = "Upload beberapa gambar per momen (idle/hide/tap/drag) -- salah satunya dipilih RANDOM tiap dipakai, biar lebih variatif. Slot kosong otomatis pakai sprite default.",
+                        text = "Upload beberapa gambar per momen (idle/hide/tap/drag) -- SATU dipilih RANDOM tiap dipakai (bukan slideshow/animasi jalan berurutan), biar gak itu-itu terus. Slot kosong otomatis pakai sprite default.\n\n💡 Mau ada gerakan (kedip/ekor gerak dll)? Upload .gif, bukan gambar diam -- .gif yang kepilih random bakal jalan sendiri. Gambar diam sebanyak apa pun tetap diam.",
                         fontSize = 10.sp,
                         color = Color(0xFFB0BEC5)
                     )
@@ -915,6 +915,16 @@ fun MainDashboardScreen() {
                                                             .size(56.dp)
                                                             .background(Color(0xFF37474F), RoundedCornerShape(8.dp))
                                                     )
+                                                    if (path.endsWith(".gif", ignoreCase = true)) {
+                                                        Box(
+                                                            modifier = Modifier
+                                                                .align(Alignment.BottomStart)
+                                                                .background(Color(0xCC2E7D32), RoundedCornerShape(4.dp))
+                                                                .padding(horizontal = 4.dp, vertical = 1.dp)
+                                                        ) {
+                                                            Text("GIF", fontSize = 8.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                                                        }
+                                                    }
                                                     Box(
                                                         modifier = Modifier
                                                             .align(Alignment.TopEnd)
