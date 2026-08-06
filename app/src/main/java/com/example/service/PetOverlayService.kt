@@ -846,12 +846,12 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         if (isPetHidden) {
             hideButton?.visibility = View.GONE
             showButtonPill?.visibility = View.VISIBLE
-            val tutupPintuPath = com.example.model.PoseSpriteManager.getRandomPoseImagePath(
-                com.example.model.PoseSpriteManager.PoseSlot.HIDE_TUTUP_PINTU
+            val pintuPath = com.example.model.PoseSpriteManager.getRandomPoseImagePath(
+                com.example.model.PoseSpriteManager.PoseSlot.HIDE_PINTU
             )
-            if (tutupPintuPath != null) {
-                // Ada aset transisi tutup pintu -> tampilin sebentar dulu, baru sembunyi
-                updatePetSpriteForPose(com.example.model.PoseSpriteManager.PoseSlot.HIDE_TUTUP_PINTU)
+            if (pintuPath != null) {
+                // Ada aset transisi pintu -> tampilin sebentar dulu, baru sembunyi
+                updatePetSpriteForPose(com.example.model.PoseSpriteManager.PoseSlot.HIDE_PINTU)
                 serviceScope.launch {
                     delay(500L)
                     if (isPetHidden) {
@@ -869,12 +869,12 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             petImage?.visibility = View.VISIBLE
             hideButton?.visibility = View.VISIBLE
             showButtonPill?.visibility = View.GONE
-            val bukaPintuPath = com.example.model.PoseSpriteManager.getRandomPoseImagePath(
-                com.example.model.PoseSpriteManager.PoseSlot.HIDE_BUKA_PINTU
+            val pintuPath = com.example.model.PoseSpriteManager.getRandomPoseImagePath(
+                com.example.model.PoseSpriteManager.PoseSlot.HIDE_PINTU
             )
-            if (bukaPintuPath != null) {
-                // Ada aset transisi buka pintu -> tampilin sebentar, baru balik ke idle normal
-                updatePetSpriteForPose(com.example.model.PoseSpriteManager.PoseSlot.HIDE_BUKA_PINTU)
+            if (pintuPath != null) {
+                // Ada aset transisi pintu -> tampilin sebentar, baru balik ke idle normal
+                updatePetSpriteForPose(com.example.model.PoseSpriteManager.PoseSlot.HIDE_PINTU)
                 serviceScope.launch {
                     delay(500L)
                     if (!isPetHidden) {
