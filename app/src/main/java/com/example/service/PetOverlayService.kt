@@ -86,6 +86,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     private var isDragging = false
     private var isDraggingBerontak = false // udah ganti pose berontak apa belum (biar gak load ulang tiap ACTION_MOVE)
     private val DRAG_BERONTAK_THRESHOLD_MS = 3000L
+    private val DRAG_HOLD_THRESHOLD_MS = 2500L // tahan sekian lama dulu baru drag beneran aktif -- biar tap sekilas gak ketriger drag
     private var isFalling = false
     private var isPetHidden = false
 
@@ -107,6 +108,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
     /** Jendela waktu: Gemini cuma boleh dipanggil otomatis kalau pet DISENTUH dalam X ms terakhir. */
     private val RECENT_INTERACTION_WINDOW_MS = 60_000L // 1 menit
+    private val AUTO_HIDE_IDLE_SECONDS = 40 // pet otomatis sembunyi kalau didiemin selama ini, tombol manual tetap jalan kapan aja
 
     private var behaviorTicksRemaining = 0
 
@@ -323,6 +325,12 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                         speakBubble(com.example.data.PetQuoteSettings.getQuote("bosan", PetQuotes.boredQuotes))
                         syncToObsidian()
                     }
+
+                    // Kelamaan didiemin -> otomatis sembunyi sendiri. Tombol manual (hideButton/
+                    // showButtonPill) tetap bisa dipencet kapan aja, terlepas dari timer ini.
+                    if (elapsedSeconds >= AUTO_HIDE_IDLE_SECONDS) {
+                        togglePetVisibility()
+                    }
                 }
 
                 if (now - lastIdleChatterTime >= com.example.data.IdleChatterSettings.getIntervalMs(applicationContext)) {
@@ -456,6 +464,39 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         } else {
             updatePetSprite(held = fallbackHeld)
         }
+    }
+
+    /**
+     * Tampilin pose transisi pintu (kalau ada aset-nya) dan NUNGGU sampe gif/gambar itu
+     * beneran kemuat & tampil (lewat listener Coil, bukan delay tebak-tebakan) sebelum
+     * kasih jeda [afterVisibleMs] biar keliatan geraknya, baru panggil [onDone]. Kalau gak
+     * ada aset custom, langsung panggil [onDone] tanpa nunggu apa-apa.
+     */
+    private fun playPintuTransitionThen(afterVisibleMs: Long = 700L, onDone: () -> Unit) {
+        val iv = petImage ?: run { onDone(); return }
+        val pintuPath = com.example.model.PoseSpriteManager.getRandomPoseImagePath(
+            com.example.model.PoseSpriteManager.PoseSlot.HIDE_PINTU
+        )
+        if (pintuPath == null || !java.io.File(pintuPath).exists()) {
+            onDone()
+            return
+        }
+        val loader = com.example.data.GifAwareImageLoader.get(applicationContext)
+        val request = coil.request.ImageRequest.Builder(applicationContext)
+            .data(pintuPath)
+            .target(iv)
+            .crossfade(true)
+            .listener(
+                onSuccess = { _, _ ->
+                    serviceScope.launch {
+                        delay(afterVisibleMs)
+                        onDone()
+                    }
+                },
+                onError = { _, _ -> onDone() }
+            )
+            .build()
+        loader.enqueue(request)
     }
 
     private fun listenForNotificationBus() {
@@ -646,6 +687,8 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         // Touch Listener for Drag & Drop + Stair Fall physics
         petImage?.setOnTouchListener(object : View.OnTouchListener {
             private var clickTime = 0L
+            private var holdEngaged = false // udah lewat DRAG_HOLD_THRESHOLD_MS & drag beneran aktif?
+            private var holdJob: Job? = null
 
             override fun onTouch(v: View?, event: MotionEvent): Boolean {
                 val p = params ?: return false
@@ -653,7 +696,8 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                     MotionEvent.ACTION_DOWN -> {
                         clickTime = System.currentTimeMillis()
                         fallingJob?.cancel()
-                        isDragging = true
+                        isDragging = false
+                        holdEngaged = false
                         isDraggingBerontak = false
                         isFalling = false
                         behaviorState = PetBehaviorState.IDLE
@@ -664,13 +708,28 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                         initialTouchX = event.rawX
                         initialTouchY = event.rawY
 
-                        updatePetSpriteForPose(com.example.model.PoseSpriteManager.PoseSlot.DRAG_PASRAH, fallbackHeld = true)
-                        speakBubble(com.example.data.PetQuoteSettings.getQuote("drag", PetQuotes.dragQuotes))
+                        // Belum langsung dianggap drag -- tunggu ditahan DRAG_HOLD_THRESHOLD_MS
+                        // dulu, baru pose & kalimat drag muncul + posisi mulai ikut gerak.
+                        // Sebelum itu, sentuhan masih bisa berakhir jadi tap biasa.
+                        holdJob?.cancel()
+                        holdJob = serviceScope.launch {
+                            delay(DRAG_HOLD_THRESHOLD_MS)
+                            holdEngaged = true
+                            isDragging = true
+                            // Rekap ulang titik acuan pas drag beneran mulai, biar pet gak "loncat"
+                            // ngikutin posisi jari yang mungkin udah geser selama masa tahan.
+                            initialX = p.x
+                            initialY = p.y
+                            initialTouchX = event.rawX
+                            initialTouchY = event.rawY
+                            updatePetSpriteForPose(com.example.model.PoseSpriteManager.PoseSlot.DRAG_PASRAH, fallbackHeld = true)
+                            speakBubble(com.example.data.PetQuoteSettings.getQuote("drag", PetQuotes.dragQuotes))
+                        }
                         return true
                     }
 
                     MotionEvent.ACTION_MOVE -> {
-                        if (isDragging) {
+                        if (holdEngaged && isDragging) {
                             p.x = initialX + (event.rawX - initialTouchX).toInt()
                             p.y = initialY + (event.rawY - initialTouchY).toInt()
                             windowManager.updateViewLayout(overlayView, p)
@@ -684,14 +743,16 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                         return true
                     }
 
-                    MotionEvent.ACTION_UP -> {
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        holdJob?.cancel()
+                        val wasDragging = isDragging
                         isDragging = false
                         val duration = System.currentTimeMillis() - clickTime
 
                         val deltaX = abs(event.rawX - initialTouchX)
                         val deltaY = abs(event.rawY - initialTouchY)
 
-                        if (duration < 200 && deltaX < 15 && deltaY < 15) {
+                        if (!wasDragging && duration < 200 && deltaX < 15 && deltaY < 15) {
                             // Pet Tapped -- pose reaksi acak, ringan atau berlebihan
                             val tapSlot = if ((0..1).random() == 0) {
                                 com.example.model.PoseSpriteManager.PoseSlot.TAP_RINGAN
@@ -704,13 +765,14 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                             behaviorState = PetBehaviorState.IDLE
                             behaviorTicksRemaining = 0
                             requestSmartDialog("tap")
-                        } else {
-                            // Released after drag -> tetap diam di titik itu (nggak jatuh lagi, atas request Master)
+                        } else if (wasDragging) {
+                            // Released after drag beneran aktif -> tetap diam di titik itu (nggak jatuh lagi, atas request Master)
                             updatePetSpriteForPose(com.example.model.PoseSpriteManager.PoseSlot.IDLE_DIAM, fallbackHeld = false)
                             handleUserInteraction(2)
                             behaviorState = PetBehaviorState.IDLE
                             behaviorTicksRemaining = 0
                         }
+                        // else: ditahan tapi dilepas sebelum jadi tap valid & sebelum drag aktif -> dibiarin, gak ngapa-ngapain
                         return true
                     }
                 }
@@ -846,43 +908,24 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         if (isPetHidden) {
             hideButton?.visibility = View.GONE
             showButtonPill?.visibility = View.VISIBLE
-            val pintuPath = com.example.model.PoseSpriteManager.getRandomPoseImagePath(
-                com.example.model.PoseSpriteManager.PoseSlot.HIDE_PINTU
-            )
-            if (pintuPath != null) {
-                // Ada aset transisi pintu -> tampilin sebentar dulu, baru sembunyi
-                updatePetSpriteForPose(com.example.model.PoseSpriteManager.PoseSlot.HIDE_PINTU)
-                serviceScope.launch {
-                    delay(500L)
-                    if (isPetHidden) {
-                        speechCard?.visibility = View.GONE
-                        petImage?.visibility = View.GONE
-                    }
+            playPintuTransitionThen {
+                if (isPetHidden) {
+                    speechCard?.visibility = View.GONE
+                    petImage?.visibility = View.GONE
                 }
-            } else {
-                // Belum ada aset transisi -> langsung sembunyi kayak biasa
-                speechCard?.visibility = View.GONE
-                petImage?.visibility = View.GONE
             }
         } else {
             speechCard?.visibility = View.VISIBLE
             petImage?.visibility = View.VISIBLE
             hideButton?.visibility = View.VISIBLE
             showButtonPill?.visibility = View.GONE
-            val pintuPath = com.example.model.PoseSpriteManager.getRandomPoseImagePath(
-                com.example.model.PoseSpriteManager.PoseSlot.HIDE_PINTU
-            )
-            if (pintuPath != null) {
-                // Ada aset transisi pintu -> tampilin sebentar, baru balik ke idle normal
-                updatePetSpriteForPose(com.example.model.PoseSpriteManager.PoseSlot.HIDE_PINTU)
-                serviceScope.launch {
-                    delay(500L)
-                    if (!isPetHidden) {
-                        updatePetSpriteForPose(com.example.model.PoseSpriteManager.PoseSlot.IDLE_DIAM)
-                    }
+            // Reset mood & timer idle -- biar pet yang baru dimunculin gak langsung ke-auto-hide
+            // lagi di tick berikutnya cuma karena elapsedSeconds-nya masih nyisa dari sebelum disembunyiin.
+            handleUserInteraction(0)
+            playPintuTransitionThen {
+                if (!isPetHidden) {
+                    updatePetSpriteForPose(com.example.model.PoseSpriteManager.PoseSlot.IDLE_DIAM)
                 }
-            } else {
-                updatePetSpriteForPose(com.example.model.PoseSpriteManager.PoseSlot.IDLE_DIAM)
             }
             speakBubble("Halo lagi, Master!")
         }
