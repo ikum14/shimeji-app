@@ -115,6 +115,9 @@ fun MainDashboardScreen() {
     val lifecycleOwner = LocalLifecycleOwner.current
 
     // Pet Progress & Level Stats — dibaca dari store yang sama dipakai PetOverlayService, biar nggak beda angka lagi
+    var petName by remember { mutableStateOf(com.example.data.PetProgressStore.getName(context)) }
+    var showEditNameDialog by remember { mutableStateOf(false) }
+    var editNameInput by remember { mutableStateOf("") }
     var petLevel by remember { mutableStateOf(com.example.data.PetProgressStore.getLevel(context)) }
     var petXp by remember { mutableStateOf(com.example.data.PetProgressStore.getXp(context)) }
     val maxXp = com.example.data.PetProgressStore.MAX_XP_PER_LEVEL
@@ -141,7 +144,7 @@ fun MainDashboardScreen() {
     // Function to trigger save to markdown
     fun savePetProgressToMarkdown() {
         val data = PetProgressData(
-            petName = "Chibi Girl Shimeji",
+            petName = petName,
             level = petLevel,
             currentXp = petXp,
             maxXp = maxXp,
@@ -1252,12 +1255,55 @@ fun MainDashboardScreen() {
                     }
 
                     TextButton(
+                        onClick = {
+                            editNameInput = petName
+                            showEditNameDialog = true
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Ganti Nama Pet", fontSize = 11.sp, color = Color(0xFF4A90D9))
+                    }
+
+                    TextButton(
                         onClick = { showResetLevelDialog = true },
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("Reset Level ke 1", fontSize = 11.sp, color = Color(0xFFB33A3A))
                     }
                 }
+            }
+
+            if (showEditNameDialog) {
+                AlertDialog(
+                    onDismissRequest = { showEditNameDialog = false },
+                    title = { Text("Ganti Nama Pet") },
+                    text = {
+                        OutlinedTextField(
+                            value = editNameInput,
+                            onValueChange = { editNameInput = it },
+                            singleLine = true,
+                            label = { Text("Nama baru") }
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            val newName = editNameInput.trim()
+                            if (newName.isNotBlank()) {
+                                petName = newName
+                                com.example.data.PetProgressStore.saveName(context, newName)
+                                Toast.makeText(context, "Nama pet diganti jadi \"$newName\"", Toast.LENGTH_SHORT).show()
+                            }
+                            showEditNameDialog = false
+                        }) {
+                            Text("Simpan")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showEditNameDialog = false }) {
+                            Text("Batal")
+                        }
+                    }
+                )
             }
 
             if (showResetLevelDialog) {

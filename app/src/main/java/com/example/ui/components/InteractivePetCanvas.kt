@@ -147,7 +147,7 @@ fun InteractivePetCanvas(
         fun syncToObsidian() {
             try {
                 val data = com.example.data.PetProgressData(
-                    petName = "Chibi Girl Shimeji",
+                    petName = com.example.data.PetProgressStore.getName(context),
                     level = petLevel,
                     currentXp = petXp,
                     maxXp = maxXp,

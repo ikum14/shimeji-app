@@ -93,7 +93,8 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
     /** Job & durasi buat mekanisme "intip" -- pet nongol sebentar pas disembunyiin, lalu balik sembunyi lagi. */
     private var peekJob: Job? = null
-    private val PEEK_VISIBLE_MS = 6_000L // 6 detik nongol tiap kali "intip"
+    private val HIDE_TRANSITION_VISIBLE_MS = 6_500L // jeda gif pintu (hide/muncul) & peek, disamain 6.5 detik
+    private val PEEK_VISIBLE_MS = HIDE_TRANSITION_VISIBLE_MS // 6.5 detik nongol tiap kali "intip"
 
     private var petSizePx = 0
     private var behaviorState = PetBehaviorState.IDLE
@@ -179,7 +180,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     private fun syncToObsidian() {
         try {
             val data = com.example.data.PetProgressData(
-                petName = "Chibi Girl Shimeji",
+                petName = com.example.data.PetProgressStore.getName(applicationContext),
                 level = petLevel,
                 currentXp = petXp,
                 maxXp = maxXp,
@@ -473,7 +474,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
      * kasih jeda [afterVisibleMs] biar keliatan geraknya, baru panggil [onDone]. Kalau gak
      * ada aset custom, langsung panggil [onDone] tanpa nunggu apa-apa.
      */
-    private fun playPintuTransitionThen(afterVisibleMs: Long = 700L, onDone: () -> Unit) {
+    private fun playPintuTransitionThen(afterVisibleMs: Long = HIDE_TRANSITION_VISIBLE_MS, onDone: () -> Unit) {
         val iv = petImage ?: run { onDone(); return }
         val pintuPath = com.example.model.PoseSpriteManager.getRandomPoseImagePath(
             com.example.model.PoseSpriteManager.PoseSlot.HIDE_PINTU
