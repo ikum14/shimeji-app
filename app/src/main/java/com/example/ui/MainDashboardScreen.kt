@@ -41,6 +41,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -64,6 +65,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -116,6 +118,7 @@ fun MainDashboardScreen() {
     var petLevel by remember { mutableStateOf(com.example.data.PetProgressStore.getLevel(context)) }
     var petXp by remember { mutableStateOf(com.example.data.PetProgressStore.getXp(context)) }
     val maxXp = com.example.data.PetProgressStore.MAX_XP_PER_LEVEL
+    var showResetLevelDialog by remember { mutableStateOf(false) }
     var totalInteractions by remember { mutableStateOf(38) }
     var happiness by remember { mutableStateOf(95) }
     var energy by remember { mutableStateOf(88) }
@@ -1247,7 +1250,44 @@ fun MainDashboardScreen() {
                             Text("Simpan .md", fontSize = 11.sp)
                         }
                     }
+
+                    TextButton(
+                        onClick = { showResetLevelDialog = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Reset Level ke 1", fontSize = 11.sp, color = Color(0xFFB33A3A))
+                    }
                 }
+            }
+
+            if (showResetLevelDialog) {
+                AlertDialog(
+                    onDismissRequest = { showResetLevelDialog = false },
+                    title = { Text("Reset Level Pet?") },
+                    text = { Text("Level & XP pet bakal balik ke Level 1 / 0 XP. Data lain (kostum, pose kustom, hadiah unlock, dll) gak kesentuh sama sekali. Gak bisa dibatalin.") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            petLevel = 1
+                            petXp = 0
+                            com.example.data.PetProgressStore.reset(context)
+                            com.example.model.PetDataBus.shareData(
+                                level = petLevel,
+                                xp = petXp,
+                                emotion = "Senang",
+                                speechMessage = "Level ku direset, mulai dari awal lagi~"
+                            )
+                            showResetLevelDialog = false
+                            Toast.makeText(context, "Level pet direset ke Level 1", Toast.LENGTH_SHORT).show()
+                        }) {
+                            Text("Reset", color = Color(0xFFB33A3A))
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showResetLevelDialog = false }) {
+                            Text("Batal")
+                        }
+                    }
+                )
             }
 
             }

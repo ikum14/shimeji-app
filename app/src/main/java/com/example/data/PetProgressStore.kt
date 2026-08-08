@@ -27,4 +27,9 @@ object PetProgressStore {
             .putInt(KEY_XP, xp)
             .apply()
     }
+
+    /** Balikin level & XP ke titik awal (Level 1, 0 XP). Dipakai tombol "Reset Level" di dashboard. */
+    fun reset(context: Context) {
+        save(context, 1, 0)
+    }
 }
