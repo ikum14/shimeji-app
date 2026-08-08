@@ -17,6 +17,7 @@ object TtsVoiceSettings {
     private const val KEY_SPEED = "speed"
     private const val KEY_PAUSE_MS = "pause_ms"
     private const val KEY_PAUSE_AT_EMOJI = "pause_at_emoji"
+    private const val KEY_LANGUAGE = "quote_language"
 
     const val MIN_PITCH = 0.5f
     const val MAX_PITCH = 2.0f
@@ -60,5 +61,14 @@ object TtsVoiceSettings {
     fun setPauseAtEmoji(context: Context, value: Boolean) {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit().putBoolean(KEY_PAUSE_AT_EMOJI, value).apply()
+    }
+
+    /** Bahasa kalimat pet ("id" atau "en") -- dipakai buat pilih PetQuotes.<kategori>(language). */
+    fun getLanguage(context: Context): String =
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(KEY_LANGUAGE, "id") ?: "id"
+
+    fun setLanguage(context: Context, language: String) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putString(KEY_LANGUAGE, language).apply()
     }
 }

@@ -218,11 +218,11 @@ fun InteractivePetCanvas(
                     val elapsedSeconds = ((System.currentTimeMillis() - lastInteractionTimestamp) / 1000).toInt()
                     if (elapsedSeconds >= 20 && petEmotion != "Kesal") {
                         petEmotion = "Kesal"
-                        speechBubble = PetQuotes.kesalQuotes.random()
+                        speechBubble = PetQuotes.kesalQuotes(com.example.data.TtsVoiceSettings.getLanguage(context)).random()
                         syncToObsidian()
                     } else if (elapsedSeconds >= 10 && petEmotion == "Senang") {
                         petEmotion = "Bosan"
-                        speechBubble = PetQuotes.boredQuotes.random()
+                        speechBubble = PetQuotes.boredQuotes(com.example.data.TtsVoiceSettings.getLanguage(context)).random()
                         syncToObsidian()
                     }
                 }
@@ -413,7 +413,7 @@ fun InteractivePetCanvas(
                         onClick = {
                             isHidden = !isHidden
                             if (isHidden) {
-                                speechBubble = PetQuotes.hiddenQuotes.random()
+                                speechBubble = PetQuotes.hiddenQuotes(com.example.data.TtsVoiceSettings.getLanguage(context)).random()
                             } else {
                                 speechBubble = "Aku kembali! Woohoo~"
                             }
@@ -472,7 +472,7 @@ fun InteractivePetCanvas(
                                             val shiftY = -(dy / dist) * 45f
                                             petX = (petX + shiftX).coerceIn(0f, maxX)
                                             petY = (petY + shiftY).coerceIn(0f, floorY)
-                                            speechBubble = PetQuotes.getMotionQuote(petLevel, isDodging = true)
+                                            speechBubble = PetQuotes.getMotionQuote(petLevel, isDodging = true, language = com.example.data.TtsVoiceSettings.getLanguage(context))
                                         }
                                     } else {
                                         // Phase 2: Level > 10 (Dewasa) - Pet Otomatis Berjalan Mendekati & Mengikuti Posisi Koordinat Kursor
@@ -487,7 +487,7 @@ fun InteractivePetCanvas(
                                             petX += (targetX - petX) * followSpeedFactor
                                             petY += (targetY - petY) * followSpeedFactor
                                             if (idleSeconds % 2 == 0) {
-                                                speechBubble = PetQuotes.getMotionQuote(petLevel, isDodging = false)
+                                                speechBubble = PetQuotes.getMotionQuote(petLevel, isDodging = false, language = com.example.data.TtsVoiceSettings.getLanguage(context))
                                             }
                                         }
                                     }
@@ -514,7 +514,7 @@ fun InteractivePetCanvas(
                                 .padding(bottom = 6.dp)
                                 .shadow(6.dp, RoundedCornerShape(16.dp))
                                 .clickable {
-                                    speechBubble = PetQuotes.getTapQuote(petLevel)
+                                    speechBubble = PetQuotes.getTapQuote(petLevel, language = com.example.data.TtsVoiceSettings.getLanguage(context))
                                     heartsCount++
                                     resetIdleTimerAndAddXp(5)
                                 },
@@ -642,7 +642,7 @@ fun InteractivePetCanvas(
                                         isDragging = true
                                         isFalling = false
                                         currentPose = PetPose.HELD
-                                        speechBubble = PetQuotes.dragQuotes.random()
+                                        speechBubble = PetQuotes.dragQuotes(com.example.data.TtsVoiceSettings.getLanguage(context)).random()
                                     },
                                     onDragEnd = {
                                         isDragging = false
@@ -665,7 +665,7 @@ fun InteractivePetCanvas(
                                 )
                             }
                             .clickable {
-                                speechBubble = PetQuotes.getTapQuote(petLevel)
+                                speechBubble = PetQuotes.getTapQuote(petLevel, language = com.example.data.TtsVoiceSettings.getLanguage(context))
                                 currentPose = PetPose.HAPPY
                                 heartsCount++
                                 resetIdleTimerAndAddXp(5)

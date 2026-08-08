@@ -206,6 +206,10 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         }
     }
 
+    /** Bahasa kalimat pet yang lagi aktif ("id"/"en"), dibaca fresh tiap dipanggil biar langsung
+     * kepakai begitu Master ganti di Setelan, tanpa perlu restart service. */
+    private fun currentLanguage(): String = com.example.data.TtsVoiceSettings.getLanguage(applicationContext)
+
     private fun handleUserInteraction(addedXp: Int = 5) {
         lastInteractionTimestamp = System.currentTimeMillis()
         petEmotion = "Senang"
@@ -320,11 +324,11 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                     val elapsedSeconds = ((now - lastInteractionTimestamp) / 1000).toInt()
                     if (elapsedSeconds >= 20 && petEmotion != "Kesal") {
                         petEmotion = "Kesal"
-                        speakBubble(com.example.data.PetQuoteSettings.getQuote("kesal", PetQuotes.kesalQuotes))
+                        speakBubble(com.example.data.PetQuoteSettings.getQuote("kesal", PetQuotes.kesalQuotes(currentLanguage())))
                         syncToObsidian()
                     } else if (elapsedSeconds >= 10 && petEmotion == "Senang") {
                         petEmotion = "Bosan"
-                        speakBubble(com.example.data.PetQuoteSettings.getQuote("bosan", PetQuotes.boredQuotes))
+                        speakBubble(com.example.data.PetQuoteSettings.getQuote("bosan", PetQuotes.boredQuotes(currentLanguage())))
                         syncToObsidian()
                     }
 
@@ -343,7 +347,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                         requestSmartDialog("idle")
                     } else {
                         peekAndReveal()
-                        speakBubble(com.example.data.PetQuoteSettings.getQuote("idle", PetQuotes.idleQuotes))
+                        speakBubble(com.example.data.PetQuoteSettings.getQuote("idle", PetQuotes.idleQuotes(currentLanguage())))
                     }
                 }
             }
@@ -732,7 +736,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                             initialTouchX = event.rawX
                             initialTouchY = event.rawY
                             updatePetSpriteForPose(com.example.model.PoseSpriteManager.PoseSlot.DRAG_PASRAH, fallbackHeld = true)
-                            speakBubble(com.example.data.PetQuoteSettings.getQuote("drag", PetQuotes.dragQuotes))
+                            speakBubble(com.example.data.PetQuoteSettings.getQuote("drag", PetQuotes.dragQuotes(currentLanguage())))
                         }
                         return true
                     }
@@ -772,7 +776,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                                 com.example.model.PoseSpriteManager.PoseSlot.TAP_BERLEBIHAN
                             }
                             updatePetSpriteForPose(tapSlot, fallbackHeld = false)
-                            speakBubble(com.example.data.PetQuoteSettings.getQuote("tap", PetQuotes.tapQuotes))
+                            speakBubble(com.example.data.PetQuoteSettings.getQuote("tap", PetQuotes.tapQuotes(currentLanguage())))
                             handleUserInteraction(5)
                             behaviorState = PetBehaviorState.IDLE
                             behaviorTicksRemaining = 0

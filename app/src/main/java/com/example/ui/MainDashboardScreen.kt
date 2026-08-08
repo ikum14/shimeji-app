@@ -195,6 +195,7 @@ fun MainDashboardScreen() {
     var ttsSpeed by remember { mutableFloatStateOf(com.example.data.TtsVoiceSettings.getSpeed(context)) }
     var ttsPauseMs by remember { mutableFloatStateOf(com.example.data.TtsVoiceSettings.getPauseMs(context).toFloat()) }
     var ttsPauseAtEmoji by remember { mutableStateOf(com.example.data.TtsVoiceSettings.getPauseAtEmoji(context)) }
+    var petQuoteLanguage by remember { mutableStateOf(com.example.data.TtsVoiceSettings.getLanguage(context)) }
 
     LaunchedEffect(Unit) {
         com.example.data.TtsSpeaker.init(context)
@@ -2089,6 +2090,40 @@ fun MainDashboardScreen() {
                                 ttsPauseAtEmoji = it
                                 com.example.data.TtsVoiceSettings.setPauseAtEmoji(context, it)
                             }
+                        )
+                    }
+
+                    HorizontalDivider(color = Color(0xFF555555))
+
+                    // Bahasa kalimat pet -- ganti ini biar cocok sama voice TTS yang dipilih
+                    // (voice Inggris baca teks Indonesia atau sebaliknya kedengeran aneh)
+                    Text("🌐 Bahasa Kalimat Pet", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    Text(
+                        text = "Samain sama bahasa voice TTS yang dipilih di atas, biar gak kedengeran aneh pas dibaca",
+                        fontSize = 10.sp,
+                        color = Color(0xFFB0BEC5)
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        FilterChip(
+                            selected = petQuoteLanguage == "id",
+                            onClick = {
+                                petQuoteLanguage = "id"
+                                com.example.data.TtsVoiceSettings.setLanguage(context, "id")
+                            },
+                            label = { Text("Indonesia") },
+                            modifier = Modifier.weight(1f)
+                        )
+                        FilterChip(
+                            selected = petQuoteLanguage == "en",
+                            onClick = {
+                                petQuoteLanguage = "en"
+                                com.example.data.TtsVoiceSettings.setLanguage(context, "en")
+                            },
+                            label = { Text("English") },
+                            modifier = Modifier.weight(1f)
                         )
                     }
                 }
