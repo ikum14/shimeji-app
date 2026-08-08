@@ -183,7 +183,10 @@ object TtsSpeaker {
         var current = StringBuilder()
 
         for (ch in rawText) {
-            val isAllowed = ch.isLetterOrDigit() || ch.isWhitespace() || ch in allowedPunctuation
+            // Cuma huruf Latin (a-z/A-Z) & angka 0-9 yang dianggap "huruf beneran" -- huruf dari
+            // alfabet lain (Yunani/omega di kaomoji "(• ̀ω•́ )", Cyrillic, dll) TETAP dianggap
+            // simbol dekoratif yang harus dibuang, walau secara Unicode itu masih "isLetter()".
+            val isAllowed = ch in 'a'..'z' || ch in 'A'..'Z' || ch in '0'..'9' || ch.isWhitespace() || ch in allowedPunctuation
             if (isAllowed) {
                 current.append(ch)
                 if (ch in sentenceEnders) {
