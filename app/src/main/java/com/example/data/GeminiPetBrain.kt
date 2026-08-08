@@ -49,13 +49,14 @@ object GeminiPetBrain {
         userHobby: String,
         petLevel: Int,
         petEmotion: String,
-        vaultContext: String = ""
+        vaultContext: String = "",
+        language: String = "id"
     ): String = withContext(Dispatchers.IO) {
         if (!isConfigured()) {
             return@withContext "Gemini API key belum terpasang, Master~"
         }
         try {
-            val prompt = buildPrompt(userName, userHobby, petLevel, petEmotion, vaultContext)
+            val prompt = buildPrompt(userName, userHobby, petLevel, petEmotion, vaultContext, language)
             val requestBodyJson = JSONObject().apply {
                 put(
                     "contents", JSONArray().put(
@@ -115,7 +116,8 @@ object GeminiPetBrain {
         userHobby: String,
         petLevel: Int,
         petEmotion: String,
-        vaultContext: String
+        vaultContext: String,
+        language: String
     ): String {
         val contextBlock = if (vaultContext.isNotBlank()) {
             """
@@ -128,11 +130,18 @@ object GeminiPetBrain {
             """.trimIndent()
         } else ""
 
+        val languageInstruction = if (language == "en") {
+            "Balas HANYA dalam Bahasa Inggris (English), gaya santai/casual & gemas. JANGAN campur Bahasa Indonesia sama sekali, walau data Master atau catatan vault di bawah ini dalam Bahasa Indonesia -- tetap terjemahkan/balas full Inggris."
+        } else {
+            "Balas HANYA dalam Bahasa Indonesia, gaya santai/gemas. JANGAN campur Bahasa Inggris sama sekali, walau data Master atau catatan vault di bawah ini dalam Bahasa Inggris -- tetap terjemahkan/balas full Indonesia."
+        }
+
         return """
             Kamu adalah "Chibi Shimeji", pet virtual perempuan yang imut, ceria, dan sedikit manja,
             hidup sebagai karakter overlay di HP Android milik Master-nya.
-            Balas HANYA dengan 1 kalimat pendek (maksimal 20 kata), Bahasa Indonesia gaya santai/gemas,
-            seolah kamu benar-benar sedang menyapa Master secara langsung. Jangan pakai tanda kutip.
+            Balas HANYA dengan 1 kalimat pendek (maksimal 20 kata), seolah kamu benar-benar sedang
+            menyapa Master secara langsung. Jangan pakai tanda kutip.
+            $languageInstruction
 
             Data Master: Nama=$userName, Hobi=$userHobby
             Status pet saat ini: Level=$petLevel, Emosi=$petEmotion

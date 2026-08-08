@@ -210,6 +210,11 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
      * kepakai begitu Master ganti di Setelan, tanpa perlu restart service. */
     private fun currentLanguage(): String = com.example.data.TtsVoiceSettings.getLanguage(applicationContext)
 
+    /** Kategori custom quote (pet-quotes.md) dikasih akhiran "_en" pas mode Inggris, biar gak
+     * nyampur sama kalimat Indonesia yang udah kesimpen di kategori dasar yang sama. */
+    private fun quoteCategory(base: String): String =
+        if (currentLanguage() == "en") "${base}_en" else base
+
     private fun handleUserInteraction(addedXp: Int = 5) {
         lastInteractionTimestamp = System.currentTimeMillis()
         petEmotion = "Senang"
@@ -265,6 +270,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         }
         lastSmartDialogRequestTime = now
         serviceScope.launch {
+            val lang = currentLanguage()
             val memory = com.example.data.ObsidianMemoryManager.loadMemoryFromObsidian(applicationContext)
             val vaultContext = com.example.data.ObsidianMemoryManager.readVaultContext(applicationContext)
             val reply = com.example.data.GeminiPetBrain.generateDialog(
@@ -272,20 +278,23 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                 userHobby = memory.userHobby,
                 petLevel = petLevel,
                 petEmotion = petEmotion,
-                vaultContext = vaultContext
+                vaultContext = vaultContext,
+                language = lang
             )
             peekAndReveal()
             speakBubble(reply)
 
             // Simpan ke pet-quotes.md HANYA kalau ini beneran balasan AI (bukan pesan error
             // fallback kayak "Kuota AI-ku abis" dll -- gak mau nyampah kalimat error jadi template).
+            // Kategori dikasih akhiran "_en" pas mode Inggris, biar gak nyampur sama kalimat
+            // Indonesia yang udah kesimpen sebelumnya di kategori yang sama.
             val looksLikeError = reply.startsWith("Kuota AI-ku") ||
                 reply.startsWith("Aduh, otak AI-ku") ||
                 reply.startsWith("Koneksi ke otak AI-ku") ||
                 reply.startsWith("Ups, ada yang salah") ||
                 reply.startsWith("Hmm, aku belum tahu")
             if (!looksLikeError) {
-                com.example.data.PetQuoteSettings.appendGeneratedQuote(category, reply)
+                com.example.data.PetQuoteSettings.appendGeneratedQuote(quoteCategory(category), reply)
             }
         }
     }
@@ -324,11 +333,11 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                     val elapsedSeconds = ((now - lastInteractionTimestamp) / 1000).toInt()
                     if (elapsedSeconds >= 20 && petEmotion != "Kesal") {
                         petEmotion = "Kesal"
-                        speakBubble(com.example.data.PetQuoteSettings.getQuote("kesal", PetQuotes.kesalQuotes(currentLanguage())))
+                        speakBubble(com.example.data.PetQuoteSettings.getQuote(quoteCategory("kesal"), PetQuotes.kesalQuotes(currentLanguage())))
                         syncToObsidian()
                     } else if (elapsedSeconds >= 10 && petEmotion == "Senang") {
                         petEmotion = "Bosan"
-                        speakBubble(com.example.data.PetQuoteSettings.getQuote("bosan", PetQuotes.boredQuotes(currentLanguage())))
+                        speakBubble(com.example.data.PetQuoteSettings.getQuote(quoteCategory("bosan"), PetQuotes.boredQuotes(currentLanguage())))
                         syncToObsidian()
                     }
 
@@ -347,7 +356,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                         requestSmartDialog("idle")
                     } else {
                         peekAndReveal()
-                        speakBubble(com.example.data.PetQuoteSettings.getQuote("idle", PetQuotes.idleQuotes(currentLanguage())))
+                        speakBubble(com.example.data.PetQuoteSettings.getQuote(quoteCategory("idle"), PetQuotes.idleQuotes(currentLanguage())))
                     }
                 }
             }
@@ -736,7 +745,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                             initialTouchX = event.rawX
                             initialTouchY = event.rawY
                             updatePetSpriteForPose(com.example.model.PoseSpriteManager.PoseSlot.DRAG_PASRAH, fallbackHeld = true)
-                            speakBubble(com.example.data.PetQuoteSettings.getQuote("drag", PetQuotes.dragQuotes(currentLanguage())))
+                            speakBubble(com.example.data.PetQuoteSettings.getQuote(quoteCategory("drag"), PetQuotes.dragQuotes(currentLanguage())))
                         }
                         return true
                     }
@@ -776,7 +785,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                                 com.example.model.PoseSpriteManager.PoseSlot.TAP_BERLEBIHAN
                             }
                             updatePetSpriteForPose(tapSlot, fallbackHeld = false)
-                            speakBubble(com.example.data.PetQuoteSettings.getQuote("tap", PetQuotes.tapQuotes(currentLanguage())))
+                            speakBubble(com.example.data.PetQuoteSettings.getQuote(quoteCategory("tap"), PetQuotes.tapQuotes(currentLanguage())))
                             handleUserInteraction(5)
                             behaviorState = PetBehaviorState.IDLE
                             behaviorTicksRemaining = 0
