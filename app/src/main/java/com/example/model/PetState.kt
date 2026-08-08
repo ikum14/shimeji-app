@@ -1,7 +1,5 @@
 package com.example.model
 
-import androidx.annotation.DrawableRes
-import com.example.R
 import com.example.data.ObsidianMemoryManager
 
 /**
@@ -21,37 +19,6 @@ enum class PetPose {
 enum class FallPhysicsMode {
     STAIR_STEP, // Descends step-by-step with horizontal stair wobble
     SMOOTH      // Direct smooth gravity fall
-}
-
-/**
- * Data class holding state of the Desktop Pet
- */
-data class PetState(
-    val x: Float = 200f,
-    val y: Float = 300f,
-    val isDragging: Boolean = false,
-    val isFalling: Boolean = false,
-    val isHidden: Boolean = false,
-    val pose: PetPose = PetPose.IDLE,
-    val physicsMode: FallPhysicsMode = FallPhysicsMode.STAIR_STEP,
-    val speechBubbleText: String? = "Halo Master! Tarik aku ke atas ya~",
-    val happinessLevel: Int = 85,
-    val energyLevel: Int = 90,
-    val petScale: Float = 1.0f,
-    val fallSpeed: Float = 14f,
-    val stairStepWidth: Float = 12f,
-    val stairStepHeight: Float = 16f
-) {
-    @DrawableRes
-    fun getCurrentDrawable(): Int {
-        return when (pose) {
-            PetPose.HELD -> R.drawable.img_chibi_pet_held
-            PetPose.FALLING -> R.drawable.img_chibi_pet_held
-            PetPose.HAPPY -> R.drawable.img_chibi_pet_idle
-            PetPose.SLEEPING -> R.drawable.img_chibi_pet_idle
-            PetPose.IDLE -> R.drawable.img_chibi_pet_idle
-        }
-    }
 }
 
 /**

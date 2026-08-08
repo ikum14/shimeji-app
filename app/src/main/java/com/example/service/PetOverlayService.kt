@@ -53,6 +53,7 @@ import com.example.model.PetQuotes
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.abs
@@ -954,6 +955,10 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                 e.printStackTrace()
             }
         }
+        // Cancel scope-nya sekalian, bukan cuma job yang di-track manual -- biar semua
+        // coroutine nebeng (animasi kedip, transisi pintu, hold-drag job, dll) ikut berhenti
+        // pas service beneran dimatiin, gak nyisa jalan nyoba akses view yang udah dilepas.
+        serviceScope.cancel()
         lifecycleRegistry.currentState = Lifecycle.State.DESTROYED
     }
 

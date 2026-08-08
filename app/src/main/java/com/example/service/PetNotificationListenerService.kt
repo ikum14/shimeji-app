@@ -1,12 +1,9 @@
 package com.example.service
 
 import android.app.Notification
-import android.content.Intent
-import android.content.SharedPreferences
 import android.os.Bundle
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
-import com.example.data.TtsSpeaker
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 
@@ -112,18 +109,6 @@ class PetNotificationListenerService : NotificationListenerService() {
             )
 
             NotificationBus.emitNotification(incomingNotification)
-
-            // Broadcast intent to PetOverlayService
-            val intent = Intent(ACTION_NOTIFICATION_RECEIVED).apply {
-                putExtra(EXTRA_SPEECH_TEXT, incomingNotification.toSpeechBubbleText())
-                setPackage(this@PetNotificationListenerService.packageName)
-            }
-            sendBroadcast(intent)
         }
-    }
-
-    companion object {
-        const val ACTION_NOTIFICATION_RECEIVED = "com.example.service.PET_NOTIFICATION_RECEIVED"
-        const val EXTRA_SPEECH_TEXT = "extra_speech_text"
     }
 }

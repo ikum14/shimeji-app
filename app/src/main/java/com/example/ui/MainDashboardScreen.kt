@@ -305,6 +305,12 @@ fun MainDashboardScreen() {
         mutableStateOf(com.example.data.NotificationVoiceSettings.hasNotificationAccess(context))
     }
 
+    // Status izin "Semua Akses File" (buat baca/tulis folder Download/Obsidian) -- pola sama
+    // kayak hasNotificationAccess di atas, biar konsisten & gak nyangkut pas balik dari Settings.
+    var hasAllFilesAccess by remember {
+        mutableStateOf(com.example.data.VaultPathProvider.hasAllFilesAccess())
+    }
+
     // Re-check permission on resume & handle auto backup on app close/pause
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -313,6 +319,7 @@ fun MainDashboardScreen() {
                     hasOverlayPermission = Settings.canDrawOverlays(context)
                 }
                 hasNotificationAccess = com.example.data.NotificationVoiceSettings.hasNotificationAccess(context)
+                hasAllFilesAccess = com.example.data.VaultPathProvider.hasAllFilesAccess()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -1458,7 +1465,7 @@ fun MainDashboardScreen() {
                         lineHeight = 14.sp
                     )
 
-                    if (!com.example.data.VaultPathProvider.hasAllFilesAccess()) {
+                    if (!hasAllFilesAccess) {
                         Surface(
                             shape = RoundedCornerShape(10.dp),
                             color = Color(0xFFF4F4F4)

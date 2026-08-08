@@ -2,7 +2,6 @@ package com.example.data
 
 import android.content.Context
 import android.os.Environment
-import com.example.model.PetState
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
