@@ -298,6 +298,13 @@ fun MainDashboardScreen() {
 
     var isServiceRunning by remember { mutableStateOf(false) }
 
+    // Status izin Notification Access -- disimpan sebagai state biar bisa di-refresh pas
+    // resume dari Settings, bukan dicek ulang manual tiap recompose (itu penyebab UI-nya
+    // "nyangkut" nunjukkin belum diizinin padahal di system settings udah aktif).
+    var hasNotificationAccess by remember {
+        mutableStateOf(com.example.data.NotificationVoiceSettings.hasNotificationAccess(context))
+    }
+
     // Re-check permission on resume & handle auto backup on app close/pause
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -305,6 +312,7 @@ fun MainDashboardScreen() {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                     hasOverlayPermission = Settings.canDrawOverlays(context)
                 }
+                hasNotificationAccess = com.example.data.NotificationVoiceSettings.hasNotificationAccess(context)
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -1661,7 +1669,7 @@ fun MainDashboardScreen() {
                         )
                     }
 
-                    if (!com.example.data.NotificationVoiceSettings.hasNotificationAccess(context)) {
+                    if (!hasNotificationAccess) {
                         Surface(
                             shape = RoundedCornerShape(10.dp),
                             color = Color(0xFFF4F4F4)
