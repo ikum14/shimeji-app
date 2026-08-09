@@ -1451,6 +1451,51 @@ fun MainDashboardScreen() {
                 }
             }
 
+            // 📖 Bacaan Pet -- file .md baru di vault yang belum/udah dibacain lewat TTS
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF262626)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = "📖 Bacaan Pet",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp,
+                        color = Color.White
+                    )
+                    Text(
+                        text = "Taro file .md baru (misal hasil copy-paste artikel) di folder vault utama atau subfolder-nya (kecuali biodata.md/pet-quotes.md/pet_progress.md) -- pet bakal bacain otomatis lewat TTS pas lagi idle, terus balik ngoceh biasa. File yang udah dibaca gak diulang lagi, kecuali diedit ulang.",
+                        fontSize = 11.sp,
+                        color = Color(0xFFA2A2A2)
+                    )
+
+                    val nextUnreadFile = remember(selectedTab) {
+                        com.example.data.VaultReadingManager.findNextUnreadFile(context)
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = Color(0xFF1A1A1A),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = if (nextUnreadFile != null) {
+                                "⏳ Antrian: \"${nextUnreadFile.nameWithoutExtension}\""
+                            } else {
+                                "✅ Gak ada bacaan baru yang nunggu"
+                            },
+                            fontSize = 11.sp,
+                            color = Color(0xFFCDCDCD),
+                            modifier = Modifier.padding(10.dp)
+                        )
+                    }
+                }
+            }
+
             // 🧠 Sistem Memori Pet (Obsidian Vault biodata.md)
             Card(
                 modifier = Modifier.fillMaxWidth(),

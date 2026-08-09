@@ -56,6 +56,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.abs
 
 private enum class PetBehaviorState { IDLE, WALK_LEFT, WALK_RIGHT, CLIMB_UP, CLIMB_DOWN }
@@ -105,6 +106,12 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
     /** Waktu terakhir pet ngoceh pakai kalimat template (gratis, gak manggil API). */
     private var lastIdleChatterTime = 0L
+
+    /** True selagi pet lagi "bacain" isi file baru dari vault -- ngoceh mood biasa dijeda dulu
+     * sampai kelar, biar gak keselip di tengah bacaan. */
+    private var isReadingVaultFile = false
+    private var lastVaultReadCheckTime = 0L
+    private val VAULT_READ_CHECK_INTERVAL_MS = 15_000L // cek file baru tiap segini
     // Interval-nya sekarang diatur user lewat slider di dashboard (IdleChatterSettings),
     // dibaca live tiap tick -- BUKAN angka mati lagi.
 
@@ -260,6 +267,53 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
      * Kalimat AI yang berhasil didapat juga otomatis DISIMPAN ke pet-quotes.md di kategori
      * `category`, supaya ke depannya ikut kepakai lagi sebagai template gratis.
      */
+    /**
+     * Cek berkala apa ada file .md baru di vault yang belum dibacain. Kalau ada, langsung
+     * masuk "mode baca" -- gak dicek tiap tick biar gak boros baca disk, dikasih jeda
+     * VAULT_READ_CHECK_INTERVAL_MS antar pengecekan.
+     */
+    private fun checkForNewReadingMaterial() {
+        if (isReadingVaultFile || isPetHidden) return
+        val now = System.currentTimeMillis()
+        if (now - lastVaultReadCheckTime < VAULT_READ_CHECK_INTERVAL_MS) return
+        lastVaultReadCheckTime = now
+
+        serviceScope.launch(Dispatchers.IO) {
+            val file = com.example.data.VaultReadingManager.findNextUnreadFile(applicationContext)
+            if (file != null) {
+                withContext(Dispatchers.Main) {
+                    startReadingVaultFile(file)
+                }
+            }
+        }
+    }
+
+    /** Bacain 1 file penuh lewat TTS, tandain udah dibaca, baru balik ngoceh normal. */
+    private fun startReadingVaultFile(file: java.io.File) {
+        val content = try { file.readText(Charsets.UTF_8) } catch (e: Exception) { "" }
+        val fileName = file.nameWithoutExtension
+        if (content.isBlank()) {
+            com.example.data.VaultReadingManager.markAsRead(applicationContext, file)
+            return
+        }
+
+        isReadingVaultFile = true
+        speakBubble("📖 Lagi baca \"$fileName\" nih, Master...")
+        com.example.data.TtsSpeaker.speak(content)
+
+        // Estimasi lama bacanya biar tau kapan balik ngoceh normal -- ~14 karakter/detik
+        // (kecepatan bicara normal), disesuaikan sama slider speed TTS Master.
+        val speed = com.example.data.TtsVoiceSettings.getSpeed(applicationContext).coerceAtLeast(0.5f)
+        val estimatedMs = ((content.length / (14f * speed)) * 1000).toLong().coerceAtLeast(2000L)
+
+        serviceScope.launch {
+            delay(estimatedMs)
+            com.example.data.VaultReadingManager.markAsRead(applicationContext, file)
+            isReadingVaultFile = false
+            speakBubble("✅ Selesai baca \"$fileName\"! Makasih udah kasih bacaan baru, Master~")
+        }
+    }
+
     private fun requestSmartDialog(category: String) {
         if (!com.example.data.GeminiPetBrain.isConfigured()) return
         val now = System.currentTimeMillis()
@@ -327,9 +381,13 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
                 val now = System.currentTimeMillis()
 
-                // Perubahan mood cuma kalau pet lagi full ditampilin -- kalau lagi
-                // disembunyiin, gak usah repot ganti mood, gak ada yang liat perubahannya.
-                if (!isPetHidden) {
+                // Cek ada file bacaan baru di vault gak -- ini jalan terlepas dari status
+                // hidden/mood, biar Master bisa nambah bacaan kapan aja.
+                checkForNewReadingMaterial()
+
+                // Perubahan mood cuma kalau pet lagi full ditampilin, DAN lagi gak mode baca --
+                // gak mau ngoceh mood keselip di tengah pet lagi bacain sesuatu.
+                if (!isPetHidden && !isReadingVaultFile) {
                     val elapsedSeconds = ((now - lastInteractionTimestamp) / 1000).toInt()
                     if (elapsedSeconds >= 20 && petEmotion != "Kesal") {
                         petEmotion = "Kesal"
@@ -348,7 +406,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                     }
                 }
 
-                if (now - lastIdleChatterTime >= com.example.data.IdleChatterSettings.getIntervalMs(applicationContext)) {
+                if (!isReadingVaultFile && now - lastIdleChatterTime >= com.example.data.IdleChatterSettings.getIntervalMs(applicationContext)) {
                     lastIdleChatterTime = now
                     val recentlyTouched = now - lastInteractionTimestamp <= RECENT_INTERACTION_WINDOW_MS
                     val geminiCooldownPassed = now - lastSmartDialogRequestTime >= SMART_DIALOG_COOLDOWN_MS
