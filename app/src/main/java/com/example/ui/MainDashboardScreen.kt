@@ -109,6 +109,52 @@ import kotlinx.coroutines.launch
 import androidx.compose.runtime.collectAsState
 
 @OptIn(ExperimentalMaterial3Api::class)
+/**
+ * 1 baris slider buat 1 titik waktu mood (Bosan/Kesal/Marah/dst). Dipakai berkali-kali di
+ * card "Jadwal Mood" biar gak nulis blok Slider yang sama 7x.
+ */
+@Composable
+private fun MoodTimingSliderRow(
+    label: String,
+    context: android.content.Context,
+    getSec: (android.content.Context) -> Float,
+    setSec: (android.content.Context, Float) -> Unit
+) {
+    var sliderIndex by remember {
+        mutableFloatStateOf(com.example.data.MoodTimingSettings.indexOf(getSec(context)).toFloat())
+    }
+    val steps = com.example.data.MoodTimingSettings.STEPS_SEC
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFF1E1E1E), RoundedCornerShape(12.dp))
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(text = label, fontSize = 12.sp, color = Color.White)
+            val currentIdx = sliderIndex.roundToInt().coerceIn(0, steps.size - 1)
+            val totalSec = steps[currentIdx].toInt()
+            val displayText = if (totalSec < 60) "$totalSec detik" else "${totalSec / 60} menit"
+            Text(text = displayText, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF80CBC4))
+        }
+        Slider(
+            value = sliderIndex,
+            onValueChange = {
+                sliderIndex = it
+                val idx = it.roundToInt().coerceIn(0, steps.size - 1)
+                setSec(context, steps[idx])
+            },
+            valueRange = 0f..(steps.size - 1).toFloat(),
+            steps = steps.size - 2
+        )
+    }
+}
+
 @Composable
 fun MainDashboardScreen() {
     val context = LocalContext.current
@@ -1806,6 +1852,35 @@ fun MainDashboardScreen() {
                             fontSize = 11.sp,
                             color = Color(0xFFB0BEC5)
                         )
+                    }
+
+                    // ⏰ Jadwal Mood -- kapan tiap tahap mood pet berubah kalau didiemin.
+                    // Angka LANGSUNG kepakai tanpa restart app.
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFF1E1E1E), RoundedCornerShape(12.dp))
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "⏰ Jadwal Mood",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                        Text(
+                            text = "Kapan tiap tahap mood pet berubah kalau didiemin. Urutannya: Bosan → Kesal → Marah → Ngantuk → Tidur → Bangun → Hide.",
+                            fontSize = 11.sp,
+                            color = Color(0xFFB0BEC5)
+                        )
+                        MoodTimingSliderRow("😐 Bosan", context, com.example.data.MoodTimingSettings::getBosanSec, com.example.data.MoodTimingSettings::setBosanSec)
+                        MoodTimingSliderRow("😤 Kesal", context, com.example.data.MoodTimingSettings::getKesalSec, com.example.data.MoodTimingSettings::setKesalSec)
+                        MoodTimingSliderRow("😠 Marah", context, com.example.data.MoodTimingSettings::getMarahSec, com.example.data.MoodTimingSettings::setMarahSec)
+                        MoodTimingSliderRow("😪 Ngantuk", context, com.example.data.MoodTimingSettings::getNgantukSec, com.example.data.MoodTimingSettings::setNgantukSec)
+                        MoodTimingSliderRow("😴 Tidur", context, com.example.data.MoodTimingSettings::getTidurSec, com.example.data.MoodTimingSettings::setTidurSec)
+                        MoodTimingSliderRow("🥱 Bangun", context, com.example.data.MoodTimingSettings::getBangunSec, com.example.data.MoodTimingSettings::setBangunSec)
+                        MoodTimingSliderRow("🚪 Hide", context, com.example.data.MoodTimingSettings::getHideSec, com.example.data.MoodTimingSettings::setHideSec)
                     }
 
                     if (!hasNotificationAccess) {

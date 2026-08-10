@@ -117,7 +117,8 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
     /** Jendela waktu: Gemini cuma boleh dipanggil otomatis kalau pet DISENTUH dalam X ms terakhir. */
     private val RECENT_INTERACTION_WINDOW_MS = 60_000L // 1 menit
-    private val AUTO_HIDE_IDLE_SECONDS = 40 // pet otomatis sembunyi kalau didiemin selama ini, tombol manual tetap jalan kapan aja
+    // Jadwal mood (Bosan/Kesal/Marah/Ngantuk/Tidur/Bangun/Hide) sekarang diatur lewat
+    // MoodTimingSettings, bukan konstanta mati -- bisa diubah langsung dari dashboard.
 
     private var behaviorTicksRemaining = 0
 
@@ -152,6 +153,18 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         lifecycleRegistry.currentState = Lifecycle.State.STARTED
         lifecycleRegistry.currentState = Lifecycle.State.RESUMED
         com.example.data.BubbleSettings.init(applicationContext)
+
+        // Jaring pengaman: minta rebind listener notifikasi tiap kali service utama ini nyala
+        // (termasuk kalau sebelumnya proses app-nya mati total/ke-restart paksa) -- biar
+        // fitur baca notif WA/Telegram gak perlu Master matiin-nyalain izin manual lagi.
+        try {
+            android.service.notification.NotificationListenerService.requestRebind(
+                android.content.ComponentName(this, com.example.service.PetNotificationListenerService::class.java)
+            )
+        } catch (e: Exception) {
+            // Gak fatal kalau gagal -- listener biasanya tetap nyambung normal lewat jalur biasa
+        }
+
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         startForegroundServiceNotification()
         createFloatingPetOverlay()
@@ -299,15 +312,11 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
         isReadingVaultFile = true
         speakBubble("📖 Lagi baca \"$fileName\" nih, Master...")
-        com.example.data.TtsSpeaker.speak(content)
 
-        // Estimasi lama bacanya biar tau kapan balik ngoceh normal -- ~14 karakter/detik
-        // (kecepatan bicara normal), disesuaikan sama slider speed TTS Master.
-        val speed = com.example.data.TtsVoiceSettings.getSpeed(applicationContext).coerceAtLeast(0.5f)
-        val estimatedMs = ((content.length / (14f * speed)) * 1000).toLong().coerceAtLeast(2000L)
-
-        serviceScope.launch {
-            delay(estimatedMs)
+        // Beneran nunggu TTS ngasih sinyal "kelar ngomong" (bukan nebak durasi pakai jumlah
+        // karakter) -- baru abis itu balik ngoceh normal. Kalau nebak durasi kependekan,
+        // sistem ngoceh biasa bisa nyempil sebelum bacaan file-nya beneran abis.
+        com.example.data.TtsSpeaker.speak(content) {
             com.example.data.VaultReadingManager.markAsRead(applicationContext, file)
             isReadingVaultFile = false
             speakBubble("✅ Selesai baca \"$fileName\"! Makasih udah kasih bacaan baru, Master~")
@@ -387,21 +396,58 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
                 // Perubahan mood cuma kalau pet lagi full ditampilin, DAN lagi gak mode baca --
                 // gak mau ngoceh mood keselip di tengah pet lagi bacain sesuatu.
+                // Jadwal mood 6 menit: 1) Ceria (default) 2) Bosan->Kesal 3) Marah->Ngantuk
+                // 4) Tidur (ngelindur) 5) Bangun (masih ngelindur, bad mood) 6) Hide otomatis.
                 if (!isPetHidden && !isReadingVaultFile) {
                     val elapsedSeconds = ((now - lastInteractionTimestamp) / 1000).toInt()
-                    if (elapsedSeconds >= 20 && petEmotion != "Kesal") {
-                        petEmotion = "Kesal"
-                        speakBubble(com.example.data.PetQuoteSettings.getQuote(quoteCategory("kesal"), PetQuotes.kesalQuotes(currentLanguage())))
-                        syncToObsidian()
-                    } else if (elapsedSeconds >= 10 && petEmotion == "Senang") {
-                        petEmotion = "Bosan"
-                        speakBubble(com.example.data.PetQuoteSettings.getQuote(quoteCategory("bosan"), PetQuotes.boredQuotes(currentLanguage())))
-                        syncToObsidian()
+                    val ctx = applicationContext
+                    val bosanSec = com.example.data.MoodTimingSettings.getBosanSec(ctx).toInt()
+                    val kesalSec = com.example.data.MoodTimingSettings.getKesalSec(ctx).toInt()
+                    val marahSec = com.example.data.MoodTimingSettings.getMarahSec(ctx).toInt()
+                    val ngantukSec = com.example.data.MoodTimingSettings.getNgantukSec(ctx).toInt()
+                    val tidurSec = com.example.data.MoodTimingSettings.getTidurSec(ctx).toInt()
+                    val bangunSec = com.example.data.MoodTimingSettings.getBangunSec(ctx).toInt()
+                    when {
+                        elapsedSeconds >= bangunSec && petEmotion != "Bangun" -> {
+                            petEmotion = "Bangun"
+                            updatePetSpriteForPose(com.example.model.PoseSpriteManager.PoseSlot.IDLE_NGANTUK)
+                            speakBubble(com.example.data.PetQuoteSettings.getQuote(quoteCategory("bangun"), PetQuotes.bangunQuotes(currentLanguage())))
+                            syncToObsidian()
+                        }
+                        elapsedSeconds >= tidurSec && petEmotion != "Tidur" -> {
+                            petEmotion = "Tidur"
+                            updatePetSpriteForPose(com.example.model.PoseSpriteManager.PoseSlot.IDLE_TIDUR)
+                            speakBubble(com.example.data.PetQuoteSettings.getQuote(quoteCategory("tidur"), PetQuotes.tidurQuotes(currentLanguage())))
+                            syncToObsidian()
+                        }
+                        elapsedSeconds >= ngantukSec && petEmotion != "Ngantuk" -> {
+                            petEmotion = "Ngantuk"
+                            updatePetSpriteForPose(com.example.model.PoseSpriteManager.PoseSlot.IDLE_NGANTUK)
+                            speakBubble(com.example.data.PetQuoteSettings.getQuote(quoteCategory("ngantuk"), PetQuotes.ngantukQuotes(currentLanguage())))
+                            syncToObsidian()
+                        }
+                        elapsedSeconds >= marahSec && petEmotion != "Marah" -> {
+                            petEmotion = "Marah"
+                            speakBubble(com.example.data.PetQuoteSettings.getQuote(quoteCategory("marah"), PetQuotes.marahQuotes(currentLanguage())))
+                            syncToObsidian()
+                        }
+                        elapsedSeconds >= kesalSec && petEmotion != "Kesal" -> {
+                            petEmotion = "Kesal"
+                            speakBubble(com.example.data.PetQuoteSettings.getQuote(quoteCategory("kesal"), PetQuotes.kesalQuotes(currentLanguage())))
+                            syncToObsidian()
+                        }
+                        elapsedSeconds >= bosanSec && petEmotion == "Senang" -> {
+                            petEmotion = "Bosan"
+                            speakBubble(com.example.data.PetQuoteSettings.getQuote(quoteCategory("bosan"), PetQuotes.boredQuotes(currentLanguage())))
+                            syncToObsidian()
+                        }
                     }
 
-                    // Kelamaan didiemin -> otomatis sembunyi sendiri. Tombol manual (hideButton/
-                    // showButtonPill) tetap bisa dipencet kapan aja, terlepas dari timer ini.
-                    if (elapsedSeconds >= AUTO_HIDE_IDLE_SECONDS) {
+                    // Kelamaan didiemin -> otomatis sembunyi sendiri (buka pintu/tutup pintu).
+                    // Angka waktunya diatur lewat slider "Jadwal Mood" di dashboard. Tombol
+                    // manual (hideButton/showButtonPill) tetap bisa dipencet kapan aja.
+                    val hideSec = com.example.data.MoodTimingSettings.getHideSec(ctx).toInt()
+                    if (elapsedSeconds >= hideSec) {
                         togglePetVisibility()
                     }
                 }
@@ -1010,7 +1056,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                     updatePetSpriteForPose(com.example.model.PoseSpriteManager.PoseSlot.IDLE_DIAM)
                 }
             }
-            speakBubble("Halo lagi, Master!")
+            speakBubble(com.example.data.PetQuoteSettings.getQuote(quoteCategory("reveal"), PetQuotes.revealQuotes(currentLanguage())))
         }
     }
 

@@ -243,4 +243,70 @@ object PetQuotes {
         "I'll sulk if you don't poke me!"
     )
     fun kesalQuotes(language: String) = if (language == "en") kesalQuotesEn else kesalQuotesId
+
+    // Kalimat pas pet dimunculin lagi dari hide (sebelumnya hardcode "Halo lagi, Master!" di
+    // kode, gak bisa diedit lewat pet-quotes.md -- sekarang udah lewat sistem quote biasa.
+    private val revealQuotesId = listOf(
+        "Halo lagi, Master!",
+        "Aku balik lagi nih!",
+        "Kangen ya sama aku? Aku di sini kok~"
+    )
+    private val revealQuotesEn = listOf(
+        "Hello again, Master!",
+        "I'm back!",
+        "Miss me? I'm right here~"
+    )
+    fun revealQuotes(language: String) = if (language == "en") revealQuotesEn else revealQuotesId
+
+    // Menit ke-3 (awal): marah karena kelamaan didiemin
+    private val marahQuotesId = listOf(
+        "Udah ah, aku marah nih! Kok didiemin terus sih!",
+        "Grrr! Sebel banget diabaikan kayak gini!",
+        "Hei! Aku beneran kesel sekarang, Master!"
+    )
+    private val marahQuotesEn = listOf(
+        "That's it, I'm mad! Why do you keep ignoring me!",
+        "Grrr! I really hate being ignored like this!",
+        "Hey! I'm genuinely upset now, Master!"
+    )
+    fun marahQuotes(language: String) = if (language == "en") marahQuotesEn else marahQuotesId
+
+    // Menit ke-3 (lanjutan): capek, mulai ngantuk
+    private val ngantukQuotesId = listOf(
+        "Hoaahm... capek nih, ngantuk banget...",
+        "Mata udah berat, Master... ngantuk...",
+        "Ish, ngantuk gara-gara nunggu kelamaan nih..."
+    )
+    private val ngantukQuotesEn = listOf(
+        "Yaaawn... I'm so tired, so sleepy...",
+        "My eyes are getting heavy, Master... sleepy...",
+        "Ugh, I'm sleepy from waiting so long..."
+    )
+    fun ngantukQuotes(language: String) = if (language == "en") ngantukQuotesEn else ngantukQuotesId
+
+    // Menit ke-4: ketiduran, ngomong gak jelas (kayak ngelindur)
+    private val tidurQuotesId = listOf(
+        "Zzz... master... nanti... ya...",
+        "Mmh... ngantuk... zzz...",
+        "...zzz... jangan berisik... aku tidur..."
+    )
+    private val tidurQuotesEn = listOf(
+        "Zzz... master... later... okay...",
+        "Mmh... sleepy... zzz...",
+        "...zzz... don't be noisy... I'm sleeping..."
+    )
+    fun tidurQuotes(language: String) = if (language == "en") tidurQuotesEn else tidurQuotesId
+
+    // Menit ke-5: baru bangun, masih ngomong gak jelas, mood jelek
+    private val bangunQuotesId = listOf(
+        "Hoaam... ah, aku baru bangun... kenapa gak dibangunin dari tadi sih!",
+        "Ngg... kepala masih pusing... awas ya kalau ganggu aku sekarang!",
+        "...Baru bangun nih, jangan macem-macem, lagi bad mood aku!"
+    )
+    private val bangunQuotesEn = listOf(
+        "Yaaawn... ugh, I just woke up... why didn't you wake me up sooner!",
+        "Ngg... my head's still foggy... don't mess with me right now!",
+        "...Just woke up, don't push it, I'm in a bad mood!"
+    )
+    fun bangunQuotes(language: String) = if (language == "en") bangunQuotesEn else bangunQuotesId
 }

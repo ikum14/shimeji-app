@@ -57,6 +57,22 @@ class PetNotificationListenerService : NotificationListenerService() {
     private var lastEmittedAt: Long = 0L
     private val DEDUPE_WINDOW_MS = 5 * 60_000L // 5 menit
 
+    override fun onListenerConnected() {
+        super.onListenerConnected()
+    }
+
+    /** Koneksi listener notifikasi putus (misal app-nya ke-restart paksa/force-close) --
+     * Android gak selalu otomatis nyambungin ulang, jadi kita minta rebind manual di sini
+     * biar Master gak perlu bolak-balik matiin-nyalain izin di Settings HP lagi. */
+    override fun onListenerDisconnected() {
+        super.onListenerDisconnected()
+        try {
+            requestRebind(android.content.ComponentName(this, PetNotificationListenerService::class.java))
+        } catch (e: Exception) {
+            // Gak fatal kalau gagal -- Master masih bisa rebind manual lewat toggle izin di Settings
+        }
+    }
+
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         super.onNotificationPosted(sbn)
         val sbnNotNull = sbn ?: return
@@ -78,6 +94,19 @@ class PetNotificationListenerService : NotificationListenerService() {
         // (WhatsApp/Telegram sering kirim 1 notifikasi "ringkasan" tanpa isi pesan asli)
         val isGroupSummary = (sbnNotNull.notification.flags and Notification.FLAG_GROUP_SUMMARY) != 0
         if (!isTargetApp || isGroupSummary) return
+
+        // Lewati notifikasi "placeholder" -- WhatsApp/Telegram kadang kirim notif isinya cuma
+        // status koneksi/sinkronisasi, BUKAN pesan beneran dari orang, tapi teksnya gak
+        // kosong jadi kelolosin cek isBlank() biasa. Deteksi lewat kata kunci umum.
+        val placeholderKeywords = listOf(
+            "memeriksa pesan", "checking for new messages", "checking messages",
+            "menyinkronkan", "syncing messages", "syncing", "menghubungkan",
+            "connecting", "mencoba menyambungkan", "reconnecting",
+            "sedang memuat", "loading messages"
+        )
+        val lowerText = text.lowercase()
+        val isPlaceholder = placeholderKeywords.any { lowerText.contains(it) }
+        if (isPlaceholder) return
 
         if (text.isNotBlank()) {
             // Dedupe: kalau isi & pengirimnya SAMA PERSIS kayak notif terakhir yang
