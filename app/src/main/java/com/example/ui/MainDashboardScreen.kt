@@ -108,7 +108,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.collectAsState
 
-@OptIn(ExperimentalMaterial3Api::class)
 /**
  * 1 baris slider buat 1 titik waktu mood (Bosan/Kesal/Marah/dst). Dipakai berkali-kali di
  * card "Jadwal Mood" biar gak nulis blok Slider yang sama 7x.
@@ -155,6 +154,7 @@ private fun MoodTimingSliderRow(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainDashboardScreen() {
     val context = LocalContext.current
