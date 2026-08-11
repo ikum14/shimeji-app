@@ -93,9 +93,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     private var isPetHidden = false
 
     /** Job & durasi buat mekanisme "intip" -- pet nongol sebentar pas disembunyiin, lalu balik sembunyi lagi. */
-    private var peekJob: Job? = null
-    private val HIDE_TRANSITION_VISIBLE_MS = 6_500L // jeda gif pintu (hide/muncul) & peek, disamain 6.5 detik
-    private val PEEK_VISIBLE_MS = HIDE_TRANSITION_VISIBLE_MS // 6.5 detik nongol tiap kali "intip"
+    private val HIDE_TRANSITION_VISIBLE_MS = 6_500L // jeda gif pintu (hide/muncul), sebelum baru intip nutup pakai onDone TTS (lihat closePeekIfNeeded)
 
     private var petSizePx = 0
     private var behaviorState = PetBehaviorState.IDLE
@@ -345,7 +343,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                 language = lang
             )
             peekAndReveal()
-            speakBubble(reply)
+            speakBubble(reply) { closePeekIfNeeded() }
 
             // Simpan ke pet-quotes.md HANYA kalau ini beneran balasan AI (bukan pesan error
             // fallback kayak "Kuota AI-ku abis" dll -- gak mau nyampah kalimat error jadi template).
@@ -460,7 +458,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                         requestSmartDialog("idle")
                     } else {
                         peekAndReveal()
-                        speakBubble(com.example.data.PetQuoteSettings.getQuote(quoteCategory("idle"), PetQuotes.idleQuotes(currentLanguage())))
+                        speakBubble(com.example.data.PetQuoteSettings.getQuote(quoteCategory("idle"), PetQuotes.idleQuotes(currentLanguage()))) { closePeekIfNeeded() }
                     }
                 }
             }
@@ -497,13 +495,15 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     private var lastSpokenAt: Long = 0L
 
     /** Update teks bubble SEKALIGUS dibacain lewat TTS, pakai suara yang sudah dipilih Master di Settings. Ini yang dipakai di semua celotehan pet (tap, level up, mood, AI reply, dll). */
-    private fun speakBubble(text: String) {
+    private fun speakBubble(text: String, onDone: (() -> Unit)? = null) {
         updateBubbleUi(text)
         val now = System.currentTimeMillis()
         if (text != lastSpokenText || now - lastSpokenAt > 3000L) {
-            com.example.data.TtsSpeaker.speak(text)
+            com.example.data.TtsSpeaker.speak(text, onDone)
             lastSpokenText = text
             lastSpokenAt = now
+        } else {
+            onDone?.invoke() // teks sama baru aja diomongin, gak diulang -- tetep panggil onDone biar caller gak nyangkut
         }
     }
 
@@ -627,12 +627,19 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                 updatePetSprite(held = false)
 
                 when (com.example.data.NotificationVoiceSettings.getMode(applicationContext)) {
-                    com.example.data.VoiceReadMode.OFF -> { /* diam, tidak bersuara */ }
+                    com.example.data.VoiceReadMode.OFF -> {
+                        // Gak ada suara buat nunggu -- tutup lagi abis beberapa detik biar
+                        // Master sempet baca teksnya sekilas kalau lagi mode intip.
+                        serviceScope.launch {
+                            delay(4000L)
+                            closePeekIfNeeded()
+                        }
+                    }
                     com.example.data.VoiceReadMode.SENDER_ONLY -> {
-                        com.example.data.TtsSpeaker.speak("Pesan masuk dari ${incoming.senderName}")
+                        com.example.data.TtsSpeaker.speak("Pesan masuk dari ${incoming.senderName}") { closePeekIfNeeded() }
                     }
                     com.example.data.VoiceReadMode.FULL_MESSAGE -> {
-                        com.example.data.TtsSpeaker.speak("Pesan dari ${incoming.senderName}: ${incoming.messageText}")
+                        com.example.data.TtsSpeaker.speak("Pesan dari ${incoming.senderName}: ${incoming.messageText}") { closePeekIfNeeded() }
                     }
                 }
 
@@ -1010,30 +1017,31 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
     /**
      * Kalau pet lagi disembunyiin (isPetHidden), munculin sebentar (petImage + speechCard)
-     * buat efek "intip" -- dipanggil sebelum ngoceh berkala / balasan AI / notifikasi
-     * masuk, biar walau disembunyiin, pet tetap kelihatan sekilas + bubble-nya pas ada
-     * sesuatu yang mau disampein. Otomatis balik sembunyi lagi setelah PEEK_VISIBLE_MS,
-     * KECUALI Master keburu pencet tombol show (jadi full show beneran).
+     * buat efek "intip" -- dipanggil sebelum ngoceh berkala / balasan AI / notifikasi masuk.
+     * Nutupnya BUKAN pakai timer tetap lagi (dulu 6.5 detik, keburu nutup sebelum TTS-nya
+     * beneran kelar ngomong buat kalimat yang agak panjang) -- sekarang ditutup lewat
+     * closePeekIfNeeded(), dipanggil sebagai onDone abis speakBubble() beneran kelar.
      * Kalau pet lagi full ditampilin (!isPetHidden), fungsi ini gak ngapa-ngapain.
      */
     private fun peekAndReveal() {
         if (!isPetHidden) return
-        peekJob?.cancel()
         updatePetSpriteForPose(com.example.model.PoseSpriteManager.PoseSlot.HIDE_NGINTIP)
         petImage?.visibility = View.VISIBLE
         speechCard?.visibility = View.VISIBLE
-        peekJob = serviceScope.launch {
-            delay(PEEK_VISIBLE_MS)
-            if (isPetHidden) { // pastiin Master belum keburu pencet show full di antara waktu ini
-                petImage?.visibility = View.GONE
-                speechCard?.visibility = View.GONE
-            }
+    }
+
+    /** Pasangan peekAndReveal() -- panggil ini sebagai onDone abis speakBubble() kelar,
+     * biar bubble/pet balik sembunyi PAS beneran abis ngomong, bukan nebak durasi. Aman
+     * dipanggil kapan aja (no-op kalau pet lagi gak dalam status hidden). */
+    private fun closePeekIfNeeded() {
+        if (isPetHidden) {
+            petImage?.visibility = View.GONE
+            speechCard?.visibility = View.GONE
         }
     }
 
     private fun togglePetVisibility() {
         isPetHidden = !isPetHidden
-        peekJob?.cancel()
         if (isPetHidden) {
             hideButton?.visibility = View.GONE
             showButtonPill?.visibility = View.VISIBLE
