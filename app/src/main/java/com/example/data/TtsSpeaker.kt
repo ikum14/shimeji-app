@@ -3,7 +3,10 @@ package com.example.data
 import android.content.Context
 import android.media.AudioManager
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import android.speech.tts.Voice
 import java.util.Locale
 
@@ -25,6 +28,12 @@ object TtsSpeaker {
     private var tts: TextToSpeech? = null
     private var isReady = false
     private var pendingContext: Context? = null
+
+    // Callback per utterance ID -- pakai Map (bukan 1 variabel) biar aman kalau ada beberapa
+    // speak() jalan "bersamaan" (misal notifikasi WA masuk pas lagi bacain file panjang),
+    // gak saling numpuk/ketiban satu sama lain.
+    private val pendingDoneCallbacks = mutableMapOf<String, () -> Unit>()
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     private const val PREFS_NAME = "pet_tts_engine_prefs"
     private const val KEY_ENGINE_PACKAGE = "selected_engine_package"
@@ -52,6 +61,7 @@ object TtsSpeaker {
                     tts?.language = Locale.getDefault()
                 }
                 isReady = true
+                ensureUtteranceListener() // pasang ulang tiap kali instance TTS baru kebentuk
 
                 val savedVoiceName = NotificationVoiceSettings.getSelectedVoiceName(ctx)
                 if (savedVoiceName != null) {
@@ -143,23 +153,61 @@ object TtsSpeaker {
         NotificationVoiceSettings.setSelectedVoiceName(context, voice.name)
     }
 
-    fun speak(text: String) {
-        if (!isReady || text.isBlank()) return
+    /** Pasang listener yang beneran dengerin sinyal "kelar ngomong" dari engine TTS -- dipasang
+     * sekali aja (persist walau ganti engine, soalnya tts instance-nya bisa diganti tapi
+     * listener-nya kita pasang ulang tiap kali connectToEngine() jalan). */
+    private fun ensureUtteranceListener() {
+        tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+            override fun onStart(utteranceId: String?) {}
+
+            override fun onDone(utteranceId: String?) = fireDoneCallback(utteranceId)
+
+            @Deprecated("Deprecated in Java, tapi tetap wajib di-override buat API lama")
+            override fun onError(utteranceId: String?) = fireDoneCallback(utteranceId)
+
+            override fun onError(utteranceId: String?, errorCode: Int) = fireDoneCallback(utteranceId)
+        })
+    }
+
+    private fun fireDoneCallback(utteranceId: String?) {
+        if (utteranceId == null) return
+        val callback = synchronized(pendingDoneCallbacks) { pendingDoneCallbacks.remove(utteranceId) } ?: return
+        // Listener TTS jalan di thread background-nya sendiri -- lempar ke main thread
+        // biar aman dipakai caller buat sentuh UI/state Compose tanpa mikirin threading.
+        mainHandler.post { callback() }
+    }
+
+    fun speak(text: String, onDone: (() -> Unit)? = null) {
+        if (!isReady || text.isBlank()) {
+            onDone?.invoke()
+            return
+        }
         val ctx = pendingContext
-        if (ctx == null || PetVoiceSettings.isMuted(ctx)) return // Master lagi mute-in suara pet
+        if (ctx == null || PetVoiceSettings.isMuted(ctx)) {
+            onDone?.invoke() // tetep panggil onDone walau mute, biar caller (misal mode baca) gak nyangkut nunggu selamanya
+            return
+        }
 
         tts?.setPitch(TtsVoiceSettings.getPitch(ctx))
         tts?.setSpeechRate(TtsVoiceSettings.getSpeed(ctx))
 
         val pauseAtEmoji = TtsVoiceSettings.getPauseAtEmoji(ctx)
         val segments = buildSpeechSegments(text, pauseAtEmoji)
-        if (segments.isEmpty()) return
+        if (segments.isEmpty()) {
+            onDone?.invoke()
+            return
+        }
 
         val pauseMs = TtsVoiceSettings.getPauseMs(ctx)
         val params = Bundle().apply {
             putInt(TextToSpeech.Engine.KEY_PARAM_STREAM, AudioManager.STREAM_NOTIFICATION)
         }
         val baseId = System.currentTimeMillis().toString()
+        val lastSegmentId = "$baseId-${segments.lastIndex}"
+        if (onDone != null) {
+            synchronized(pendingDoneCallbacks) { pendingDoneCallbacks[lastSegmentId] = onDone }
+        }
+
         segments.forEachIndexed { index, segment ->
             tts?.speak(segment, TextToSpeech.QUEUE_ADD, params, "$baseId-$index")
             if (pauseMs > 0 && index != segments.lastIndex) {
