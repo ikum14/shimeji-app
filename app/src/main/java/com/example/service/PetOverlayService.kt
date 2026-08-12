@@ -110,6 +110,9 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     private var isReadingVaultFile = false
     private var lastVaultReadCheckTime = 0L
     private val VAULT_READ_CHECK_INTERVAL_MS = 15_000L // cek file baru tiap segini
+
+    /** Waktu terakhir pet nyelipin trivia Wikipedia/headline RSS, biar gak keseringan. */
+    private var lastKnowledgeShareTime = 0L
     // Interval-nya sekarang diatur user lewat slider di dashboard (IdleChatterSettings),
     // dibaca live tiap tick -- BUKAN angka mati lagi.
 
@@ -279,6 +282,62 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
      * `category`, supaya ke depannya ikut kepakai lagi sebagai template gratis.
      */
     /**
+     * Cek berkala apa waktunya nyelipin trivia Wikipedia acak / headline RSS terbaru.
+     * Dua-duanya GRATIS (gak kayak Google Search grounding yang berbayar). Kalau Gemini
+     * dikonfigurasi, info-nya diselipin natural lewat AI; kalau enggak, dibacain apa
+     * adanya pakai template sederhana.
+     */
+    private fun checkForKnowledgeShare() {
+        val ctx = applicationContext
+        val triviaOn = com.example.data.KnowledgeSettings.isTriviaEnabled(ctx)
+        val rssOn = com.example.data.KnowledgeSettings.isRssEnabled(ctx)
+        if (!triviaOn && !rssOn) return
+        if (isPetHidden || isReadingVaultFile) return
+
+        val now = System.currentTimeMillis()
+        val intervalMs = com.example.data.KnowledgeSettings.getIntervalMinutes(ctx) * 60_000L
+        if (now - lastKnowledgeShareTime < intervalMs) return
+        lastKnowledgeShareTime = now
+
+        serviceScope.launch(Dispatchers.IO) {
+            val lang = currentLanguage()
+            // Gantian antara trivia & RSS kalau dua-duanya aktif, biar variatif.
+            val useRss = rssOn && (!triviaOn || (0..1).random() == 0)
+            val fetched = if (useRss) {
+                com.example.data.RssFeedReader.getLatestHeadline(com.example.data.KnowledgeSettings.getRssUrl(ctx))
+            } else {
+                com.example.data.WikipediaLookup.getRandomFact(lang)
+            }
+            if (fetched.isNullOrBlank()) return@launch // gagal fetch (offline dll) -- diem aja, coba lagi interval berikutnya
+
+            val finalText = if (com.example.data.GeminiPetBrain.isConfigured()) {
+                val memory = com.example.data.ObsidianMemoryManager.loadMemoryFromObsidian(ctx)
+                com.example.data.GeminiPetBrain.generateDialog(
+                    userName = memory.userName,
+                    userHobby = memory.userHobby,
+                    petLevel = petLevel,
+                    petEmotion = petEmotion,
+                    language = lang,
+                    extraInfo = fetched
+                )
+            } else {
+                // Gemini gak dikonfigurasi -- bacain apa adanya pakai template simpel.
+                val prefix = if (lang == "en") {
+                    if (useRss) "Hey Master, did you hear about this? " else "Ooh, random fact time! "
+                } else {
+                    if (useRss) "Master, denger gak berita ini? " else "Eh tau gak, fun fact nih! "
+                }
+                "$prefix$fetched"
+            }
+
+            withContext(Dispatchers.Main) {
+                peekAndReveal()
+                speakBubble(finalText) { closePeekIfNeeded() }
+            }
+        }
+    }
+
+    /**
      * Cek berkala apa ada file .md baru di vault yang belum dibacain. Kalau ada, langsung
      * masuk "mode baca" -- gak dicek tiap tick biar gak boros baca disk, dikasih jeda
      * VAULT_READ_CHECK_INTERVAL_MS antar pengecekan.
@@ -334,13 +393,15 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             val lang = currentLanguage()
             val memory = com.example.data.ObsidianMemoryManager.loadMemoryFromObsidian(applicationContext)
             val vaultContext = com.example.data.ObsidianMemoryManager.readVaultContext(applicationContext)
+            val memoryContext = com.example.data.PetMemoryLog.getRecentContext()
             val reply = com.example.data.GeminiPetBrain.generateDialog(
                 userName = memory.userName,
                 userHobby = memory.userHobby,
                 petLevel = petLevel,
                 petEmotion = petEmotion,
                 vaultContext = vaultContext,
-                language = lang
+                language = lang,
+                memoryContext = memoryContext
             )
             peekAndReveal()
             speakBubble(reply) { closePeekIfNeeded() }
@@ -356,6 +417,8 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                 reply.startsWith("Hmm, aku belum tahu")
             if (!looksLikeError) {
                 com.example.data.PetQuoteSettings.appendGeneratedQuote(quoteCategory(category), reply)
+                // Sekalian catat ke riwayat memori (pet-memory.md) biar diinget di request berikutnya.
+                com.example.data.PetMemoryLog.append(applicationContext, reply)
             }
         }
     }
@@ -391,6 +454,9 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                 // Cek ada file bacaan baru di vault gak -- ini jalan terlepas dari status
                 // hidden/mood, biar Master bisa nambah bacaan kapan aja.
                 checkForNewReadingMaterial()
+
+                // Cek waktunya nyelipin trivia Wikipedia / headline RSS (kalau diaktifin).
+                checkForKnowledgeShare()
 
                 // Perubahan mood cuma kalau pet lagi full ditampilin, DAN lagi gak mode baca --
                 // gak mau ngoceh mood keselip di tengah pet lagi bacain sesuatu.

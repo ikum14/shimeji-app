@@ -242,6 +242,10 @@ fun MainDashboardScreen() {
     var ttsPauseMs by remember { mutableFloatStateOf(com.example.data.TtsVoiceSettings.getPauseMs(context).toFloat()) }
     var ttsPauseAtEmoji by remember { mutableStateOf(com.example.data.TtsVoiceSettings.getPauseAtEmoji(context)) }
     var petQuoteLanguage by remember { mutableStateOf(com.example.data.TtsVoiceSettings.getLanguage(context)) }
+    var triviaEnabled by remember { mutableStateOf(com.example.data.KnowledgeSettings.isTriviaEnabled(context)) }
+    var rssEnabled by remember { mutableStateOf(com.example.data.KnowledgeSettings.isRssEnabled(context)) }
+    var rssUrlInput by remember { mutableStateOf(com.example.data.KnowledgeSettings.getRssUrl(context)) }
+    var knowledgeIntervalMin by remember { mutableFloatStateOf(com.example.data.KnowledgeSettings.getIntervalMinutes(context).toFloat()) }
 
     LaunchedEffect(Unit) {
         com.example.data.TtsSpeaker.init(context)
@@ -2249,7 +2253,105 @@ fun MainDashboardScreen() {
                 }
             }
 
-            // 🔤 Ukuran Teks Bubble Card
+            // 🧠 Pet Pinter -- trivia Wikipedia & headline RSS, GRATIS (beda dari Google
+            // Search grounding yang berbayar). Fondasi buat upgrade nanti kalau mau nyalain
+            // pencarian bebas berbayar -- infrastrukturnya udah siap, tinggal toggle baru.
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF263238)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text("🧠 Pet Pinter", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    Text(
+                        text = "Pet nyelipin trivia Wikipedia acak atau headline berita RSS pas lagi ngoceh idle. Dua-duanya GRATIS, gak ada biaya API sama sekali.",
+                        fontSize = 11.sp,
+                        color = Color(0xFFB0BEC5)
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("📚 Trivia Wikipedia", fontSize = 12.sp, color = Color.White)
+                            Text("Fakta acak, gratis, gak butuh API key", fontSize = 10.sp, color = Color(0xFF8A8A8A))
+                        }
+                        Switch(
+                            checked = triviaEnabled,
+                            onCheckedChange = {
+                                triviaEnabled = it
+                                com.example.data.KnowledgeSettings.setTriviaEnabled(context, it)
+                            }
+                        )
+                    }
+
+                    HorizontalDivider(color = Color(0xFF555555))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("📰 Headline RSS", fontSize = 12.sp, color = Color.White)
+                            Text("Berita/info terbaru dari feed yang kamu pilih", fontSize = 10.sp, color = Color(0xFF8A8A8A))
+                        }
+                        Switch(
+                            checked = rssEnabled,
+                            onCheckedChange = {
+                                rssEnabled = it
+                                com.example.data.KnowledgeSettings.setRssEnabled(context, it)
+                            }
+                        )
+                    }
+                    if (rssEnabled) {
+                        OutlinedTextField(
+                            value = rssUrlInput,
+                            onValueChange = { rssUrlInput = it },
+                            label = { Text("URL RSS Feed", fontSize = 11.sp) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            trailingIcon = {
+                                TextButton(onClick = {
+                                    com.example.data.KnowledgeSettings.setRssUrl(context, rssUrlInput)
+                                    Toast.makeText(context, "URL RSS disimpan", Toast.LENGTH_SHORT).show()
+                                }) { Text("Simpan", fontSize = 11.sp) }
+                            }
+                        )
+                        Text(
+                            text = "Default: berita Google News Indonesia. Ganti sesuai selera (cuaca, teknologi, dll -- cari 'nama-situs RSS feed').",
+                            fontSize = 10.sp,
+                            color = Color(0xFF8A8A8A)
+                        )
+                    }
+
+                    if (triviaEnabled || rssEnabled) {
+                        HorizontalDivider(color = Color(0xFF555555))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Selipin tiap", fontSize = 12.sp, color = Color.White)
+                            Text("${knowledgeIntervalMin.roundToInt()} menit", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF80CBC4))
+                        }
+                        Slider(
+                            value = knowledgeIntervalMin,
+                            onValueChange = {
+                                knowledgeIntervalMin = it
+                                com.example.data.KnowledgeSettings.setIntervalMinutes(context, it.roundToInt())
+                            },
+                            valueRange = 5f..120f
+                        )
+                    }
+                }
+            }
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(20.dp),

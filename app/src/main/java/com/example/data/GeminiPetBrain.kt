@@ -50,13 +50,15 @@ object GeminiPetBrain {
         petLevel: Int,
         petEmotion: String,
         vaultContext: String = "",
-        language: String = "id"
+        language: String = "id",
+        memoryContext: String = "",
+        extraInfo: String = ""
     ): String = withContext(Dispatchers.IO) {
         if (!isConfigured()) {
             return@withContext "Gemini API key belum terpasang, Master~"
         }
         try {
-            val prompt = buildPrompt(userName, userHobby, petLevel, petEmotion, vaultContext, language)
+            val prompt = buildPrompt(userName, userHobby, petLevel, petEmotion, vaultContext, language, memoryContext, extraInfo)
             val requestBodyJson = JSONObject().apply {
                 put(
                     "contents", JSONArray().put(
@@ -117,7 +119,9 @@ object GeminiPetBrain {
         petLevel: Int,
         petEmotion: String,
         vaultContext: String,
-        language: String
+        language: String,
+        memoryContext: String,
+        extraInfo: String
     ): String {
         val contextBlock = if (vaultContext.isNotBlank()) {
             """
@@ -126,6 +130,28 @@ object GeminiPetBrain {
             Pakai ini KALAU relevan sama status/mood saat ini, jangan dibacain semua sekaligus:
             ---
             $vaultContext
+            ---
+            """.trimIndent()
+        } else ""
+
+        val memoryBlock = if (memoryContext.isNotBlank()) {
+            """
+
+            Riwayat singkat apa yang barusan kamu omongin ke Master (biar kamu inget, jangan
+            ngulang topik yang sama persis atau nanya hal yang udah kejawab):
+            ---
+            $memoryContext
+            ---
+            """.trimIndent()
+        } else ""
+
+        val extraInfoBlock = if (extraInfo.isNotBlank()) {
+            """
+
+            Info tambahan yang bisa kamu selipin natural ke kalimat kamu KALAU pas/nyambung
+            (gak wajib dipake semua, boleh diabaikan kalau kurang cocok sama mood saat ini):
+            ---
+            $extraInfo
             ---
             """.trimIndent()
         } else ""
@@ -146,6 +172,8 @@ object GeminiPetBrain {
             Data Master: Nama=$userName, Hobi=$userHobby
             Status pet saat ini: Level=$petLevel, Emosi=$petEmotion
             $contextBlock
+            $memoryBlock
+            $extraInfoBlock
 
             Berikan 1 kalimat sapaan/celotehan yang cocok dengan status di atas.
         """.trimIndent()
