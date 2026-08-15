@@ -1546,6 +1546,120 @@ fun MainDashboardScreen() {
                 }
             }
 
+            // 💬 Ngobrol Sama Pet -- chat dua arah, kesimpen bareng ke pet-memory.md yang
+            // sama dipakai fitur "otak Obsidian" & ngoceh berkala. Chat versi overlay
+            // (tombol 💬 di samping tombol Hide) nyambung ke file yang sama juga.
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF262626)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = "💬 Ngobrol Sama Pet",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp,
+                        color = Color.White
+                    )
+                    Text(
+                        text = "Chat langsung sama pet dari sini, atau dari tombol 💬 di overlay -- dua-duanya nyambung ke riwayat yang sama (pet-memory.md).",
+                        fontSize = 11.sp,
+                        color = Color(0xFFA2A2A2)
+                    )
+
+                    var chatHistory by remember { mutableStateOf(com.example.data.PetMemoryLog.getRawEntries()) }
+                    var chatInput by remember { mutableStateOf("") }
+                    var isSendingChat by remember { mutableStateOf(false) }
+                    val chatCoroutineScope = rememberCoroutineScope()
+                    val chatScrollState = rememberScrollState()
+
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = Color(0xFF101010),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(220.dp)
+                            .border(1.dp, Color(0xFF6F6F6F).copy(alpha = 0.4f), RoundedCornerShape(12.dp))
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(10.dp)
+                                .verticalScroll(chatScrollState)
+                        ) {
+                            if (chatHistory.isEmpty()) {
+                                Text(
+                                    text = "Belum ada obrolan. Coba sapa pet-nya di bawah!",
+                                    fontSize = 11.sp,
+                                    color = Color(0xFF858585)
+                                )
+                            } else {
+                                chatHistory.forEach { line ->
+                                    val isPet = line.contains("] Pet:")
+                                    Text(
+                                        text = line,
+                                        fontSize = 11.sp,
+                                        lineHeight = 15.sp,
+                                        color = if (isPet) Color(0xFF80CBC4) else Color(0xFFCDCDCD),
+                                        modifier = Modifier.padding(vertical = 2.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = chatInput,
+                            onValueChange = { chatInput = it },
+                            modifier = Modifier.weight(1f),
+                            placeholder = { Text("Ketik pesan...", fontSize = 12.sp) },
+                            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, color = Color.White),
+                            enabled = !isSendingChat
+                        )
+                        Button(
+                            onClick = {
+                                val msg = chatInput.trim()
+                                if (msg.isEmpty() || isSendingChat) return@Button
+                                chatInput = ""
+                                isSendingChat = true
+                                chatCoroutineScope.launch {
+                                    val memory = com.example.data.ObsidianMemoryManager.loadMemoryFromObsidian(context)
+                                    val vaultContext = com.example.data.ObsidianMemoryManager.readVaultContext(context)
+                                    val memoryContext = com.example.data.PetMemoryLog.getRecentContext()
+                                    val reply = com.example.data.GeminiPetBrain.generateChatReply(
+                                        userMessage = msg,
+                                        userName = memory.userName,
+                                        userHobby = memory.userHobby,
+                                        petLevel = com.example.data.PetProgressStore.getLevel(context),
+                                        petEmotion = "Senang",
+                                        vaultContext = vaultContext,
+                                        language = com.example.data.TtsVoiceSettings.getLanguage(context),
+                                        memoryContext = memoryContext
+                                    )
+                                    com.example.data.PetMemoryLog.appendExchange(context, msg, reply)
+                                    chatHistory = com.example.data.PetMemoryLog.getRawEntries()
+                                    isSendingChat = false
+                                }
+                            },
+                            enabled = !isSendingChat && chatInput.isNotBlank(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6F6F6F))
+                        ) {
+                            Text(if (isSendingChat) "..." else "Kirim", fontSize = 12.sp, color = Color.White)
+                        }
+                    }
+                }
+            }
+
             // 🧠 Sistem Memori Pet (Obsidian Vault biodata.md)
             Card(
                 modifier = Modifier.fillMaxWidth(),

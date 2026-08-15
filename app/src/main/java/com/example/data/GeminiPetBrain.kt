@@ -113,6 +113,134 @@ object GeminiPetBrain {
         }
     }
 
+    /**
+     * Minta Gemini balas PESAN yang beneran diketik Master (chat dua arah) -- beda dari
+     * generateDialog() yang cuma generate celotehan sepihak. Balasan boleh lebih panjang
+     * (gak dibatesin 20 kata kayak celotehan biasa).
+     */
+    suspend fun generateChatReply(
+        userMessage: String,
+        userName: String,
+        userHobby: String,
+        petLevel: Int,
+        petEmotion: String,
+        vaultContext: String = "",
+        language: String = "id",
+        memoryContext: String = ""
+    ): String = withContext(Dispatchers.IO) {
+        if (!isConfigured()) {
+            return@withContext "Gemini API key belum terpasang, Master~"
+        }
+        try {
+            val prompt = buildChatPrompt(userMessage, userName, userHobby, petLevel, petEmotion, vaultContext, language, memoryContext)
+            val requestBodyJson = JSONObject().apply {
+                put(
+                    "contents", JSONArray().put(
+                        JSONObject().put(
+                            "parts", JSONArray().put(
+                                JSONObject().put("text", prompt)
+                            )
+                        )
+                    )
+                )
+                put(
+                    "generationConfig", JSONObject().apply {
+                        put("maxOutputTokens", 150)
+                        put("temperature", 0.9)
+                    }
+                )
+            }
+
+            val request = Request.Builder()
+                .url(ENDPOINT)
+                .addHeader("x-goog-api-key", BuildConfig.GEMINI_API_KEY)
+                .addHeader("Content-Type", "application/json")
+                .post(requestBodyJson.toString().toRequestBody("application/json".toMediaType()))
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                val bodyString = response.body?.string().orEmpty()
+                if (!response.isSuccessful) {
+                    Log.e(TAG, "Gemini API error ${response.code}: $bodyString")
+                    return@withContext if (response.code == 429) {
+                        "Kuota AI-ku abis buat hari ini, Master~ 😴 (coba lagi nanti ya)"
+                    } else {
+                        "Aduh, otak AI-ku lagi error, Master~ 😵"
+                    }
+                }
+                val text = JSONObject(bodyString)
+                    .optJSONArray("candidates")
+                    ?.optJSONObject(0)
+                    ?.optJSONObject("content")
+                    ?.optJSONArray("parts")
+                    ?.optJSONObject(0)
+                    ?.optString("text")
+                    ?.trim()
+                text?.takeIf { it.isNotBlank() } ?: "Hmm, aku bingung mau jawab apa~"
+            }
+        } catch (e: IOException) {
+            Log.e(TAG, "Gagal hubungi Gemini API (jaringan)", e)
+            "Koneksi ke otak AI-ku gagal, Master~ 📡"
+        } catch (e: Exception) {
+            Log.e(TAG, "Error generate chat reply", e)
+            "Ups, ada yang salah pas aku mikir~ 🤔"
+        }
+    }
+
+    private fun buildChatPrompt(
+        userMessage: String,
+        userName: String,
+        userHobby: String,
+        petLevel: Int,
+        petEmotion: String,
+        vaultContext: String,
+        language: String,
+        memoryContext: String
+    ): String {
+        val contextBlock = if (vaultContext.isNotBlank()) {
+            """
+
+            Catatan/pengetahuan tambahan dari vault Obsidian Master:
+            ---
+            $vaultContext
+            ---
+            """.trimIndent()
+        } else ""
+
+        val memoryBlock = if (memoryContext.isNotBlank()) {
+            """
+
+            Riwayat obrolan sebelumnya (biar nyambung, jangan ngulang topik yang sama):
+            ---
+            $memoryContext
+            ---
+            """.trimIndent()
+        } else ""
+
+        val languageInstruction = if (language == "en") {
+            "Balas HANYA dalam Bahasa Inggris (English), gaya santai/casual & gemas."
+        } else {
+            "Balas HANYA dalam Bahasa Indonesia, gaya santai/gemas."
+        }
+
+        return """
+            Kamu adalah "Chibi Shimeji", pet virtual perempuan yang imut, ceria, dan sedikit manja,
+            hidup sebagai karakter overlay di HP Android milik Master-nya. Master barusan ngirim
+            pesan chat ke kamu, balas kayak lagi ngobrol beneran -- boleh 1-3 kalimat pendek,
+            gak usah kaku, jangan pakai tanda kutip.
+            $languageInstruction
+
+            Data Master: Nama=$userName, Hobi=$userHobby
+            Status pet saat ini: Level=$petLevel, Emosi=$petEmotion
+            $contextBlock
+            $memoryBlock
+
+            Pesan dari Master: "$userMessage"
+
+            Balas pesan itu sebagai Chibi Shimeji.
+        """.trimIndent()
+    }
+
     private fun buildPrompt(
         userName: String,
         userHobby: String,

@@ -55,6 +55,35 @@ object PetMemoryLog {
         }
     }
 
+    /** Catat 1 pertukaran chat dua arah (pesan Master + balasan pet) -- beda dari append()
+     * yang cuma nyimpen sapaan sepihak. Ditandai "Master:"/"Pet:" biar gampang dibedain
+     * pas ditampilin di UI chat maupun dibaca ulang jadi konteks. */
+    fun appendExchange(context: Context, userMessage: String, petReply: String) {
+        try {
+            val file = getFile() ?: return
+            val existing = if (file.exists()) readEntries(file) else emptyList()
+            val timestamp = timeFormat.format(Date())
+            val newEntries = (existing + "[$timestamp] Master: $userMessage" + "[$timestamp] Pet: $petReply")
+                .takeLast(MAX_ENTRIES)
+            writeEntries(file, newEntries)
+        } catch (e: Exception) {
+            Log.e(TAG, "Gagal nyimpen chat pet", e)
+        }
+    }
+
+    /** Ambil histori mentah (List<String>) buat ditampilin di UI chat -- beda dari
+     * getRecentContext() yang gabung jadi 1 blok teks buat prompt Gemini. */
+    fun getRawEntries(maxEntries: Int = MAX_ENTRIES): List<String> {
+        return try {
+            val file = getFile() ?: return emptyList()
+            if (!file.exists()) return emptyList()
+            readEntries(file).takeLast(maxEntries)
+        } catch (e: Exception) {
+            Log.e(TAG, "Gagal baca chat pet", e)
+            emptyList()
+        }
+    }
+
     private fun readEntries(file: File): List<String> {
         return file.readLines(Charsets.UTF_8)
             .map { it.trim() }

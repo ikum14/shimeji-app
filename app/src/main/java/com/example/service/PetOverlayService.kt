@@ -79,6 +79,15 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     private var speechCard: View? = null
     private var hideButton: TextView? = null
     private var showButtonPill: View? = null
+    private var chatButton: TextView? = null
+
+    /** Panel chat -- window WindowManager TERPISAH dari pet (bukan nempel di petContainer),
+     * supaya bisa FOCUSABLE (nerima keyboard) tanpa ngubah flag window pet utama sama sekali.
+     * null kalau lagi ketutup. */
+    private var chatOverlayView: View? = null
+    private var chatOverlayParams: WindowManager.LayoutParams? = null
+    private val chatMessagesState = mutableStateOf(listOf<String>())
+    private val chatSendingState = mutableStateOf(false)
 
     private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
     private var fallingJob: Job? = null
@@ -831,6 +840,18 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             }
         }
 
+        // Chat Pill Button -- buka/tutup panel chat dua arah (window overlay terpisah)
+        chatButton = TextView(this).apply {
+            text = " 💬 Chat "
+            textSize = 10f
+            setTextColor(0xFFFFFFFF.toInt())
+            setBackgroundColor(0xFF4CAF50.toInt())
+            setPadding(12, 6, 12, 6)
+            setOnClickListener {
+                toggleChatOverlay()
+            }
+        }
+
         // Show Pill Button (Visible when pet is hidden)
         showButtonPill = TextView(this).apply {
             text = " Show Pet "
@@ -844,7 +865,18 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             }
         }
 
-        petContainer.addView(hideButton)
+        // Row kecil buat 2 tombol pill (Hide + Chat) sejajar horizontal, di atas speechCard
+        val topButtonRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_HORIZONTAL
+        }
+        topButtonRow.addView(hideButton)
+        topButtonRow.addView(View(this).apply {
+            layoutParams = LinearLayout.LayoutParams(8, LinearLayout.LayoutParams.WRAP_CONTENT)
+        })
+        topButtonRow.addView(chatButton)
+
+        petContainer.addView(topButtonRow)
         petContainer.addView(speechCard)
         petContainer.addView(petImage)
         petContainer.addView(showButtonPill)
@@ -1106,6 +1138,185 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         }
     }
 
+    /** Buka/tutup panel chat. Panel-nya window WindowManager BARU yang terpisah dari
+     * window pet utama -- jadi bisa focusable (nerima keyboard) tanpa perlu ngubah
+     * FLAG_NOT_FOCUSABLE window pet, biar drag/tap pet yang udah jalan gak kesenggol. */
+    private fun toggleChatOverlay() {
+        if (chatOverlayView != null) {
+            closeChatOverlay()
+        } else {
+            openChatOverlay()
+        }
+    }
+
+    private fun openChatOverlay() {
+        chatMessagesState.value = com.example.data.PetMemoryLog.getRawEntries()
+
+        val chatView = ComposeView(this).apply {
+            setViewTreeLifecycleOwner(this@PetOverlayService)
+            setViewTreeSavedStateRegistryOwner(this@PetOverlayService)
+            setContent {
+                val messages by remember { chatMessagesState }
+                val isSending by remember { chatSendingState }
+                var inputText by remember { mutableStateOf("") }
+                val scrollState = rememberScrollState()
+
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = Color(0xFF1A1A1A),
+                    shadowElevation = 8.dp,
+                    modifier = Modifier.width(280.dp)
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        androidx.compose.material3.Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("💬 Ngobrol Sama Pet", fontSize = 13.sp, color = Color.White)
+                            Text(
+                                "✕",
+                                fontSize = 16.sp,
+                                color = Color(0xFFA2A2A2),
+                                modifier = Modifier.clickable { closeChatOverlay() }
+                            )
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = Color(0xFF101010),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 100.dp, max = 200.dp)
+                                .padding(top = 8.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .padding(8.dp)
+                                    .verticalScroll(scrollState)
+                            ) {
+                                if (messages.isEmpty()) {
+                                    Text("Sapa pet-nya dulu, Master~", fontSize = 11.sp, color = Color(0xFF858585))
+                                } else {
+                                    messages.forEach { line ->
+                                        val isPet = line.contains("] Pet:")
+                                        Text(
+                                            text = line,
+                                            fontSize = 11.sp,
+                                            color = if (isPet) Color(0xFF80CBC4) else Color(0xFFCDCDCD),
+                                            modifier = Modifier.padding(vertical = 2.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        androidx.compose.material3.Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            androidx.compose.material3.OutlinedTextField(
+                                value = inputText,
+                                onValueChange = { inputText = it },
+                                modifier = Modifier.weight(1f),
+                                enabled = !isSending,
+                                placeholder = { Text("Ketik pesan...", fontSize = 11.sp) },
+                                textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, color = Color.White)
+                            )
+                            Text(
+                                text = if (isSending) "..." else "Kirim",
+                                fontSize = 12.sp,
+                                color = Color(0xFF80CBC4),
+                                modifier = Modifier
+                                    .padding(start = 8.dp)
+                                    .clickable(enabled = !isSending && inputText.isNotBlank()) {
+                                        val msg = inputText.trim()
+                                        inputText = ""
+                                        sendChatMessage(msg)
+                                    }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        val layoutFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+        } else {
+            @Suppress("DEPRECATION")
+            WindowManager.LayoutParams.TYPE_PHONE
+        }
+
+        chatOverlayParams = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            layoutFlag,
+            // SENGAJA gak dikasih FLAG_NOT_FOCUSABLE -- panel ini emang butuh nerima
+            // input keyboard. Window pet utama (petImage/hideButton dkk) gak kesentuh
+            // sama sekali karena ini window WindowManager yang beda.
+            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            val p = params
+            x = (p?.x ?: 0)
+            y = ((p?.y ?: 0) - 20).coerceAtLeast(0)
+            softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+        }
+
+        try {
+            windowManager.addView(chatView, chatOverlayParams)
+            chatOverlayView = chatView
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun closeChatOverlay() {
+        chatOverlayView?.let {
+            try {
+                windowManager.removeView(it)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+        chatOverlayView = null
+    }
+
+    /** Kirim pesan chat ke Gemini, simpen hasilnya (dua arah) ke pet-memory.md yang sama
+     * dipakai fitur "otak Obsidian" & ngoceh berkala -- biar semuanya nyambung satu memori. */
+    private fun sendChatMessage(userMessage: String) {
+        if (userMessage.isBlank() || chatSendingState.value) return
+        chatSendingState.value = true
+        // Tampilin pesan Master duluan (optimistic), biar responsif sebelum balasan dateng
+        chatMessagesState.value = chatMessagesState.value + "[...] Master: $userMessage"
+        serviceScope.launch {
+            val lang = currentLanguage()
+            val memory = com.example.data.ObsidianMemoryManager.loadMemoryFromObsidian(applicationContext)
+            val vaultContext = com.example.data.ObsidianMemoryManager.readVaultContext(applicationContext)
+            val memoryContext = com.example.data.PetMemoryLog.getRecentContext()
+            val reply = com.example.data.GeminiPetBrain.generateChatReply(
+                userMessage = userMessage,
+                userName = memory.userName,
+                userHobby = memory.userHobby,
+                petLevel = petLevel,
+                petEmotion = petEmotion,
+                vaultContext = vaultContext,
+                language = lang,
+                memoryContext = memoryContext
+            )
+            com.example.data.PetMemoryLog.appendExchange(applicationContext, userMessage, reply)
+            chatMessagesState.value = com.example.data.PetMemoryLog.getRawEntries()
+            chatSendingState.value = false
+
+            // Pet ikut nampilin balasannya di speech bubble juga, biar kerasa "hidup"
+            // walau lagi mode chat (peek kalau lagi disembunyiin).
+            peekAndReveal()
+            speakBubble(reply) { closePeekIfNeeded() }
+        }
+    }
+
     private fun togglePetVisibility() {
         isPetHidden = !isPetHidden
         if (isPetHidden) {
@@ -1140,6 +1351,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         idleTimerJob?.cancel()
         behaviorJob?.cancel()
         com.example.data.TtsSpeaker.shutdown()
+        closeChatOverlay()
         overlayView?.let {
             try {
                 windowManager.removeView(it)
