@@ -20,16 +20,21 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.app.NotificationCompat
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.collectAsState
@@ -1168,7 +1173,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                     modifier = Modifier.width(280.dp)
                 ) {
                     Column(modifier = Modifier.padding(12.dp)) {
-                        androidx.compose.material3.Row(
+                        Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
@@ -1209,13 +1214,13 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                                 }
                             }
                         }
-                        androidx.compose.material3.Row(
+                        Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(top = 8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            androidx.compose.material3.OutlinedTextField(
+                            OutlinedTextField(
                                 value = inputText,
                                 onValueChange = { inputText = it },
                                 modifier = Modifier.weight(1f),
