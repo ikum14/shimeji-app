@@ -834,6 +834,15 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             val sizePx = (110 * resources.displayMetrics.density).toInt()
             petSizePx = sizePx
             layoutParams = LinearLayout.LayoutParams(sizePx, sizePx)
+            // DEBUG SEMENTARA -- cek apakah petImage beneran ke-attach & punya ukuran/drawable
+            post {
+                android.util.Log.d(
+                    "PetDebug",
+                    "petImage post-layout: width=${this.width} height=${this.height} " +
+                        "visibility=${this.visibility} drawable=${this.drawable} " +
+                        "isAttachedToWindow=${this.isAttachedToWindow} alpha=${this.alpha}"
+                )
+            }
         }
 
         // Hide Pill Button
