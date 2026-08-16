@@ -105,7 +105,9 @@ import com.example.model.CostumeManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.runtime.collectAsState
 
 /**
@@ -1571,11 +1573,17 @@ fun MainDashboardScreen() {
                         color = Color(0xFFA2A2A2)
                     )
 
-                    var chatHistory by remember { mutableStateOf(com.example.data.PetMemoryLog.getRawEntries()) }
+                    var chatHistory by remember { mutableStateOf(listOf<String>()) }
                     var chatInput by remember { mutableStateOf("") }
                     var isSendingChat by remember { mutableStateOf(false) }
                     val chatCoroutineScope = rememberCoroutineScope()
                     val chatScrollState = rememberScrollState()
+
+                    LaunchedEffect(Unit) {
+                        chatHistory = withContext(Dispatchers.IO) {
+                            com.example.data.PetMemoryLog.getRawEntries()
+                        }
+                    }
 
                     Surface(
                         shape = RoundedCornerShape(12.dp),

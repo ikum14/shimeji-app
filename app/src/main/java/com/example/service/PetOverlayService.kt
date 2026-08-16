@@ -1158,7 +1158,14 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     }
 
     private fun openChatOverlay() {
-        chatMessagesState.value = com.example.data.PetMemoryLog.getRawEntries()
+        // Baca histori chat di background -- JANGAN di main thread, ini bekas
+        // penyebab overlay berat/nge-freeze pas dibuka.
+        serviceScope.launch {
+            val entries = withContext(Dispatchers.IO) {
+                com.example.data.PetMemoryLog.getRawEntries()
+            }
+            chatMessagesState.value = entries
+        }
 
         val chatView = ComposeView(this).apply {
             setViewTreeLifecycleOwner(this@PetOverlayService)
