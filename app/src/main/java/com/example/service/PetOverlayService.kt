@@ -635,10 +635,15 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         if (effectiveId.startsWith("http") || effectiveId.contains("/")) {
             // Kostum kustom dari galeri HP atau URL -> load pakai Coil
             val loader = com.example.data.GifAwareImageLoader.get(applicationContext)
+            val fallbackRes = resolveLocalCostumeDrawable("default", held)
             val request = coil.request.ImageRequest.Builder(applicationContext)
                 .data(effectiveId)
                 .target(iv)
                 .crossfade(true)
+                // Placeholder & error fallback -- petImage JANGAN PERNAH kosong sama sekali,
+                // baik pas masih loading maupun kalau gagal load (file ilang/network gagal).
+                .placeholder(fallbackRes)
+                .error(fallbackRes)
                 .build()
             loader.enqueue(request)
         } else {
@@ -657,10 +662,13 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         val customPath = com.example.model.PoseSpriteManager.getRandomPoseImagePath(slot)
         if (customPath != null && java.io.File(customPath).exists()) {
             val loader = com.example.data.GifAwareImageLoader.get(applicationContext)
+            val fallbackRes = resolveLocalCostumeDrawable("default", fallbackHeld)
             val request = coil.request.ImageRequest.Builder(applicationContext)
                 .data(customPath)
                 .target(iv)
                 .crossfade(true)
+                .placeholder(fallbackRes)
+                .error(fallbackRes)
                 .build()
             loader.enqueue(request)
         } else {
@@ -834,15 +842,6 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             val sizePx = (110 * resources.displayMetrics.density).toInt()
             petSizePx = sizePx
             layoutParams = LinearLayout.LayoutParams(sizePx, sizePx)
-            // DEBUG SEMENTARA -- cek apakah petImage beneran ke-attach & punya ukuran/drawable
-            post {
-                android.util.Log.d(
-                    "PetDebug",
-                    "petImage post-layout: width=${this.width} height=${this.height} " +
-                        "visibility=${this.visibility} drawable=${this.drawable} " +
-                        "isAttachedToWindow=${this.isAttachedToWindow} alpha=${this.alpha}"
-                )
-            }
         }
 
         // Hide Pill Button
