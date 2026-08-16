@@ -1047,7 +1047,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
         try {
             windowManager.addView(overlayView, params)
-            android.util.Log.d("PetDebug", "windowManager.addView SUKSES, params.x=${params.x} y=${params.y} w=${params.width} h=${params.height}")
+            android.util.Log.d("PetDebug", "windowManager.addView SUKSES, params.x=${params?.x} y=${params?.y} w=${params?.width} h=${params?.height}")
         } catch (e: Exception) {
             android.util.Log.e("PetDebug", "windowManager.addView GAGAL", e)
             e.printStackTrace()
