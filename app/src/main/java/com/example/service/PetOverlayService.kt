@@ -629,12 +629,9 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
     /** Selalu panggil ini (bukan setImageResource langsung) supaya kostum aktif ke-apply dengan benar. */
     private fun updatePetSprite(held: Boolean) {
-        val iv = petImage
-        android.util.Log.d("PetDebug", "updatePetSprite dipanggil, petImage null? ${iv == null}, held=$held")
-        if (iv == null) return
+        val iv = petImage ?: return
         val rawCostumeId = com.example.model.CostumeManager.kostumAktif.value
         val effectiveId = com.example.model.CostumeManager.getEffectiveCostumeUrlOrId(rawCostumeId, petLevel)
-        android.util.Log.d("PetDebug", "rawCostumeId=$rawCostumeId effectiveId=$effectiveId petLevel=$petLevel")
 
         if (effectiveId.startsWith("http") || effectiveId.contains("/")) {
             // Kostum kustom dari galeri HP atau URL -> load pakai Coil
@@ -648,32 +645,11 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                 // baik pas masih loading maupun kalau gagal load (file ilang/network gagal).
                 .placeholder(fallbackRes)
                 .error(fallbackRes)
-                .listener(
-                    onSuccess = { _, _ -> android.util.Log.d("PetDebug", "Coil onSuccess buat $effectiveId, drawable sekarang=${iv.drawable}") },
-                    onError = { _, result -> android.util.Log.d("PetDebug", "Coil onError buat $effectiveId: ${result.throwable}") }
-                )
                 .build()
             loader.enqueue(request)
         } else {
             iv.setImageResource(resolveLocalCostumeDrawable(effectiveId, held))
-            android.util.Log.d("PetDebug", "setImageResource langsung dipanggil buat $effectiveId, drawable sekarang=${iv.drawable}")
         }
-
-        // Cek window/clipping 2 detik kemudian -- berlaku buat KEDUA jalur (Coil maupun
-        // setImageResource langsung), biar gak ada celah kayak sebelumnya.
-        iv.postDelayed({
-            android.util.Log.d("PetDebug", "CEK 2 DETIK KEMUDIAN: drawable=${iv.drawable} width=${iv.width} height=${iv.height} visibility=${iv.visibility}")
-            val ov = overlayView
-            val pc = petContainerRef
-            android.util.Log.d(
-                "PetDebug",
-                "WINDOW INFO: overlayView(root).height=${ov?.height} overlayView.width=${ov?.width} " +
-                    "petContainer.height=${pc?.height} petImage.top(relatif ke parent)=${iv.top} " +
-                    "petImage.getGlobalVisibleRect=${android.graphics.Rect().also { iv.getGlobalVisibleRect(it) }} " +
-                    "windowParams.height=${params?.height} windowParams.width=${params?.width} " +
-                    "windowParams.x=${params?.x} windowParams.y=${params?.y}"
-            )
-        }, 2000)
     }
 
     /**
@@ -823,6 +799,10 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         // Speech Bubble View — pakai Compose, ukuran TETAP dari awal (bukan WRAP_CONTENT dinamis)
         // supaya window WindowManager di luar nggak pernah perlu resize ulang sama sekali.
         speechCard = ComposeView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
             setViewTreeLifecycleOwner(this@PetOverlayService)
             setViewTreeSavedStateRegistryOwner(this@PetOverlayService)
             setContent {
@@ -878,7 +858,6 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             setBackgroundColor(0xFFE91E63.toInt())
             setPadding(12, 6, 12, 6)
             setOnClickListener {
-                android.util.Log.d("PetDebug", "hideButton DIKLIK")
                 togglePetVisibility()
             }
         }
@@ -891,7 +870,6 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             setBackgroundColor(0xFF4CAF50.toInt())
             setPadding(12, 6, 12, 6)
             setOnClickListener {
-                android.util.Log.d("PetDebug", "chatButton DIKLIK")
                 toggleChatOverlay()
             }
         }
@@ -905,7 +883,6 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             setPadding(16, 10, 16, 10)
             visibility = View.GONE
             setOnClickListener {
-                android.util.Log.d("PetDebug", "showButtonPill DIKLIK")
                 togglePetVisibility()
             }
         }
@@ -914,6 +891,10 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         val topButtonRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
         }
         topButtonRow.addView(hideButton)
         topButtonRow.addView(View(this).apply {
@@ -960,7 +941,6 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             private var holdJob: Job? = null
 
             override fun onTouch(v: View?, event: MotionEvent): Boolean {
-                android.util.Log.d("PetDebug", "petImage onTouch kena, action=${event.action}")
                 val p = params ?: return false
                 when (event.action) {
                     MotionEvent.ACTION_DOWN -> {
