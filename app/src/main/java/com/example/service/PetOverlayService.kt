@@ -1047,7 +1047,12 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
         try {
             windowManager.addView(overlayView, params)
-            android.util.Log.d("PetDebug", "windowManager.addView SUKSES, params.x=${params?.x} y=${params?.y} w=${params?.width} h=${params?.height}")
+            // FIX: window WRAP_CONTENT baru keukur bener sesudah petContainer (tombol +
+            // speechCard + petImage + showButtonPill) selesai ke-layout. Sebelum ini,
+            // clampWindowToScreen() cuma kepanggil pas bubble teks berubah -- artinya
+            // sebelum pet pertama kali "ngomong", window bisa lebih kecil dari
+            // seharusnya dan motong petImage di luar area yang bisa digambar/disentuh.
+            overlayView.post { clampWindowToScreen() }
         } catch (e: Exception) {
             android.util.Log.e("PetDebug", "windowManager.addView GAGAL", e)
             e.printStackTrace()
