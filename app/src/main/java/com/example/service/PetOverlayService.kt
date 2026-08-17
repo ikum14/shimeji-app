@@ -655,6 +655,13 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             loader.enqueue(request)
             iv.postDelayed({
                 android.util.Log.d("PetDebug", "CEK 2 DETIK KEMUDIAN: drawable=${iv.drawable} width=${iv.width} height=${iv.height} visibility=${iv.visibility}")
+                val ov = overlayView
+                android.util.Log.d(
+                    "PetDebug",
+                    "WINDOW INFO: overlayView(root).height=${ov?.height} petImage.top(relatif ke parent)=${iv.top} " +
+                        "petImage.getGlobalVisibleRect=${android.graphics.Rect().also { iv.getGlobalVisibleRect(it) }} " +
+                        "windowParams.height=${params?.height} windowParams.width=${params?.width}"
+                )
             }, 2000)
         } else {
             iv.setImageResource(resolveLocalCostumeDrawable(effectiveId, held))
