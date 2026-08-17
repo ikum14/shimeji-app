@@ -650,6 +650,29 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         } else {
             iv.setImageResource(resolveLocalCostumeDrawable(effectiveId, held))
         }
+
+        // DEBUG: cek ukuran tiap komponen satu-satu, 2 detik kemudian
+        iv.postDelayed({
+            val ov = overlayView
+            val pc = petContainerRef
+            val hb = hideButton
+            val cb = chatButton
+            val sc = speechCard
+            android.util.Log.d(
+                "PetDebug",
+                "SATU-SATU: overlayView.height=${ov?.height} petContainer.height=${pc?.height} " +
+                    "hideButton.height=${hb?.height} chatButton.height=${cb?.height} " +
+                    "speechCard.height=${sc?.height} speechCard.width=${sc?.width} " +
+                    "petImage.height=${iv.height} petImage.top=${iv.top} " +
+                    "petImage.getGlobalVisibleRect=${android.graphics.Rect().also { iv.getGlobalVisibleRect(it) }}"
+            )
+            android.util.Log.d(
+                "PetDebug",
+                "LAYOUTPARAMS: speechCard.layoutParams=${sc?.layoutParams?.width}x${sc?.layoutParams?.height} " +
+                    "topButtonRow.layoutParams height=${(hb?.parent as? LinearLayout)?.layoutParams?.height} " +
+                    "windowParams.width=${params?.width} windowParams.height=${params?.height}"
+            )
+        }, 2000)
     }
 
     /**
