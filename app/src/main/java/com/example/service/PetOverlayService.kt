@@ -88,6 +88,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     private var hideButton: TextView? = null
     private var showButtonPill: View? = null
     private var chatButton: TextView? = null
+    private var petContainerRef: LinearLayout? = null
 
     /** Panel chat -- window WindowManager TERPISAH dari pet (bukan nempel di petContainer),
      * supaya bisa FOCUSABLE (nerima keyboard) tanpa ngubah flag window pet utama sama sekali.
@@ -653,20 +654,26 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                 )
                 .build()
             loader.enqueue(request)
-            iv.postDelayed({
-                android.util.Log.d("PetDebug", "CEK 2 DETIK KEMUDIAN: drawable=${iv.drawable} width=${iv.width} height=${iv.height} visibility=${iv.visibility}")
-                val ov = overlayView
-                android.util.Log.d(
-                    "PetDebug",
-                    "WINDOW INFO: overlayView(root).height=${ov?.height} petImage.top(relatif ke parent)=${iv.top} " +
-                        "petImage.getGlobalVisibleRect=${android.graphics.Rect().also { iv.getGlobalVisibleRect(it) }} " +
-                        "windowParams.height=${params?.height} windowParams.width=${params?.width}"
-                )
-            }, 2000)
         } else {
             iv.setImageResource(resolveLocalCostumeDrawable(effectiveId, held))
             android.util.Log.d("PetDebug", "setImageResource langsung dipanggil buat $effectiveId, drawable sekarang=${iv.drawable}")
         }
+
+        // Cek window/clipping 2 detik kemudian -- berlaku buat KEDUA jalur (Coil maupun
+        // setImageResource langsung), biar gak ada celah kayak sebelumnya.
+        iv.postDelayed({
+            android.util.Log.d("PetDebug", "CEK 2 DETIK KEMUDIAN: drawable=${iv.drawable} width=${iv.width} height=${iv.height} visibility=${iv.visibility}")
+            val ov = overlayView
+            val pc = petContainerRef
+            android.util.Log.d(
+                "PetDebug",
+                "WINDOW INFO: overlayView(root).height=${ov?.height} overlayView.width=${ov?.width} " +
+                    "petContainer.height=${pc?.height} petImage.top(relatif ke parent)=${iv.top} " +
+                    "petImage.getGlobalVisibleRect=${android.graphics.Rect().also { iv.getGlobalVisibleRect(it) }} " +
+                    "windowParams.height=${params?.height} windowParams.width=${params?.width} " +
+                    "windowParams.x=${params?.x} windowParams.y=${params?.y}"
+            )
+        }, 2000)
     }
 
     /**
@@ -811,6 +818,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
         }
+        petContainerRef = petContainer
 
         // Speech Bubble View — pakai Compose, ukuran TETAP dari awal (bukan WRAP_CONTENT dinamis)
         // supaya window WindowManager di luar nggak pernah perlu resize ulang sama sekali.
