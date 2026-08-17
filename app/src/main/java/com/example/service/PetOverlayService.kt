@@ -167,6 +167,8 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
     override fun onCreate() {
         super.onCreate()
+        // Pastikan attach sebelum restore supaya SavedStateRegistry bekerja benar
+        savedStateRegistryController.performAttach()
         savedStateRegistryController.performRestore(null)
         lifecycleRegistry.currentState = Lifecycle.State.CREATED
         lifecycleRegistry.currentState = Lifecycle.State.STARTED
@@ -276,30 +278,6 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     }
 
     /**
-     * Minta Gemini bikin kalimat celotehan baru berdasarkan biodata.md + SEMUA file .md
-     * lain di vault pet-virtual + status pet saat ini. Semua file dibaca ULANG dari disk
-     * tiap kali fungsi ini jalan (real-time) — bukan dari cache lama — supaya perubahan
-     * terbaru yang kamu tulis di Obsidian langsung kepakai tanpa perlu buka dashboard dulu.
-     * Dipanggil dari 2 tempat: (1) tap langsung ke pet, (2) idle chatter timer kalau pet
-     * baru aja disentuh. Ada cooldown 1 menit antar request biar kuota API gak cepet abis
-     * (lihat SMART_DIALOG_COOLDOWN_MS).
-     * Kalimat template (PetQuotes) tetap tampil dulu sebagai placeholder instan,
-     * lalu ditimpa begitu balasan AI datang (butuh beberapa detik, ada koneksi internet).
-     */
-    /**
-     * Minta Gemini bikin kalimat celotehan baru berdasarkan biodata.md + SEMUA file .md
-     * lain di vault pet-virtual + status pet saat ini. Semua file dibaca ULANG dari disk
-     * tiap kali fungsi ini jalan (real-time) — bukan dari cache lama — supaya perubahan
-     * terbaru yang kamu tulis di Obsidian langsung kepakai tanpa perlu buka dashboard dulu.
-     * Dipanggil dari 2 tempat: (1) tap langsung ke pet, (2) idle chatter timer kalau pet
-     * baru aja disentuh. Ada cooldown 1 menit antar request biar kuota API gak cepet abis
-     * (lihat SMART_DIALOG_COOLDOWN_MS).
-     * Kalimat template (PetQuotes) tetap tampil dulu sebagai placeholder instan,
-     * lalu ditimpa begitu balasan AI datang (butuh beberapa detik, ada koneksi internet).
-     * Kalimat AI yang berhasil didapat juga otomatis DISIMPAN ke pet-quotes.md di kategori
-     * `category`, supaya ke depannya ikut kepakai lagi sebagai template gratis.
-     */
-    /**
      * Cek berkala apa waktunya nyelipin trivia Wikipedia acak / headline RSS terbaru.
      * Dua-duanya GRATIS (gak kayak Google Search grounding yang berbayar). Kalau Gemini
      * dikonfigurasi, info-nya diselipin natural lewat AI; kalau enggak, dibacain apa
@@ -403,7 +381,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         val now = System.currentTimeMillis()
         if (now - lastSmartDialogRequestTime < SMART_DIALOG_COOLDOWN_MS) {
             // Masih dalam masa cooldown, biarin kalimat template dari tap-nya tetap tampil,
-            // gak usah nembak Gemini lagi biar kuota gak cepet abis.
+            // gak usah nembak Gemini lagi biar kuota API gak cepet abis.
             return
         }
         lastSmartDialogRequestTime = now
@@ -567,7 +545,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     private fun updateBubbleUi(text: String) {
         speechBubbleTextState.value = text
         // Compose butuh 1 frame buat recompose+relayout dulu sebelum window WindowManager
-        // di luar dipaksa resize -- makanya dikasih delay kecil, bukan langsung.
+        // di luar dipaksa resize ulang -- makanya dikasih delay kecil, bukan langsung.
         serviceScope.launch {
             delay(50)
             clampWindowToScreen()
@@ -829,8 +807,9 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             setViewTreeLifecycleOwner(this@PetOverlayService)
             setViewTreeSavedStateRegistryOwner(this@PetOverlayService)
             setContent {
-                val text by remember { speechBubbleTextState }
-                val mood by remember { bubbleMoodState }
+                // Use MutableState directly (tidak perlu wrap dengan remember{})
+                val text by speechBubbleTextState
+                val mood by bubbleMoodState
                 val fontSizeSp by com.example.data.BubbleSettings.fontSizeSp.collectAsState()
                 val useMoodColor by com.example.data.BubbleStyleSettings.useMoodColor.collectAsState()
                 val customBgColor by com.example.data.BubbleStyleSettings.bgColor.collectAsState()
@@ -978,8 +957,12 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
                         initialX = p.x
                         initialY = p.y
-                        initialTouchX = event.rawX
-                        initialTouchY = event.rawY
+
+                        // Capture raw coordinates immediately (MotionEvent can be recycled)
+                        val downRawX = event.rawX
+                        val downRawY = event.rawY
+                        initialTouchX = downRawX
+                        initialTouchY = downRawY
 
                         // Sinyal visual instan pas kesentuh -- biar keliatan sentuhannya "kehitung"
                         // sementara masih nunggu DRAG_HOLD_THRESHOLD_MS, bukan diem gak ada respon.
@@ -1000,8 +983,9 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                             // ngikutin posisi jari yang mungkin udah geser selama masa tahan.
                             initialX = p.x
                             initialY = p.y
-                            initialTouchX = event.rawX
-                            initialTouchY = event.rawY
+                            // Use captured down coords instead of event (might be recycled)
+                            initialTouchX = downRawX
+                            initialTouchY = downRawY
                             updatePetSpriteForPose(com.example.model.PoseSpriteManager.PoseSlot.DRAG_PASRAH, fallbackHeld = true)
                             speakBubble(com.example.data.PetQuoteSettings.getQuote(quoteCategory("drag"), PetQuotes.dragQuotes(currentLanguage())))
                         }
@@ -1010,9 +994,14 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
                     MotionEvent.ACTION_MOVE -> {
                         if (holdEngaged && isDragging) {
+                            // Use event values here (still in same touch sequence)
                             p.x = initialX + (event.rawX - initialTouchX).toInt()
                             p.y = initialY + (event.rawY - initialTouchY).toInt()
-                            windowManager.updateViewLayout(overlayView, p)
+                            try {
+                                windowManager.updateViewLayout(overlayView, p)
+                            } catch (e: Exception) {
+                                // ignore
+                            }
 
                             // Kelamaan di-drag -> ganti pose jadi berontak (cuma sekali)
                             if (!isDraggingBerontak && System.currentTimeMillis() - clickTime > DRAG_BERONTAK_THRESHOLD_MS) {
@@ -1219,8 +1208,9 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             setViewTreeLifecycleOwner(this@PetOverlayService)
             setViewTreeSavedStateRegistryOwner(this@PetOverlayService)
             setContent {
-                val messages by remember { chatMessagesState }
-                val isSending by remember { chatSendingState }
+                // Use MutableState directly (tidak perlu remember{})
+                val messages by chatMessagesState
+                val isSending by chatSendingState
                 var inputText by remember { mutableStateOf("") }
                 val scrollState = rememberScrollState()
 
@@ -1233,7 +1223,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                     Column(modifier = Modifier.padding(12.dp)) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween,
+                            horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text("💬 Ngobrol Sama Pet", fontSize = 13.sp, color = Color.White)
