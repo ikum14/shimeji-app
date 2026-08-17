@@ -1052,7 +1052,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             // clampWindowToScreen() cuma kepanggil pas bubble teks berubah -- artinya
             // sebelum pet pertama kali "ngomong", window bisa lebih kecil dari
             // seharusnya dan motong petImage di luar area yang bisa digambar/disentuh.
-            overlayView.post { clampWindowToScreen() }
+            overlayView?.post { clampWindowToScreen() }
         } catch (e: Exception) {
             android.util.Log.e("PetDebug", "windowManager.addView GAGAL", e)
             e.printStackTrace()
