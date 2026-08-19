@@ -5,9 +5,9 @@ import org.json.JSONObject
 import java.io.File
 
 /**
- * Ngelacak file .md baru di vault Obsidian (folder utama & subfolder-nya) yang belum pernah
- * "dibacain" pet secara lengkap lewat TTS. Selain 3 file yang udah dipakai buat hal lain
- * (biodata.md, pet-quotes.md, pet_progress.md), SEMUA file .md dianggap kandidat bacaan.
+ * Ngelacak file .md baru di subfolder "Reading/" vault Obsidian yang belum pernah "dibacain"
+ * pet secara lengkap lewat TTS. Cuma nyisir folder Reading/ (bukan seluruh vault) biar
+ * lebih terarah -- taro file .md yang emang mau dibacain di situ.
  *
  * File yang udah dibaca gak bakal dibacain ulang -- kecuali file-nya diedit lagi (lastModified
  * berubah dari terakhir kali dibaca), baru dianggap "baru" lagi.
@@ -16,7 +16,14 @@ object VaultReadingManager {
     private const val PREFS_NAME = "pet_vault_reading"
     private const val KEY_READ_MAP = "read_files_json" // relativePath -> lastModified saat dibaca
 
-    private val RESERVED_NAMES = setOf("biodata.md", "pet-quotes.md", "pet_progress.md")
+    /** Nama subfolder di dalam vault yang jadi sumber bacaan. */
+    private const val READING_SUBFOLDER = "Reading"
+
+    // biodata.md/pet-quotes.md/pet_progress.md/pet-memory.md dipakai buat hal lain (biodata,
+    // kutipan AI, progress level, log memori chat) -- BUKAN buat dibacain lewat TTS. pet-memory.md
+    // khususnya sering banget ke-update (tiap ada obrolan baru), kalau gak dikecualiin bikin
+    // sistem baca-vault nganggep "file baru" terus-terusan dan bikin app lag.
+    private val RESERVED_NAMES = setOf("biodata.md", "pet-quotes.md", "pet_progress.md", "pet-memory.md")
 
     private fun loadReadMap(context: Context): MutableMap<String, Long> {
         val json = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -47,11 +54,12 @@ object VaultReadingManager {
     fun findNextUnreadFile(context: Context): File? {
         if (!VaultPathProvider.hasAllFilesAccess()) return null
         val vaultDir = VaultPathProvider.getObsidianVaultDir()
-        if (!vaultDir.exists()) return null
+        val readingDir = File(vaultDir, READING_SUBFOLDER)
+        if (!readingDir.exists() || !readingDir.isDirectory) return null
         val readMap = loadReadMap(context)
 
         val candidates = try {
-            vaultDir.walkTopDown()
+            readingDir.walkTopDown()
                 .filter { it.isFile && it.extension.equals("md", ignoreCase = true) }
                 .filter { it.name !in RESERVED_NAMES }
                 .sortedBy { it.lastModified() } // file paling lama nunggu, dibaca duluan
