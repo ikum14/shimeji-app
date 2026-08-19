@@ -659,29 +659,21 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             val cb = chatButton
             val sc = speechCard
             val sb = showButtonPill
-            val topRow = hb?.parent as? LinearLayout
             android.util.Log.d(
                 "PetDebug",
                 "SATU-SATU: overlayView.height=${ov?.height} petContainer.height=${pc?.height} " +
-                    "topButtonRow.height=${topRow?.height} hideButton.height=${hb?.height} chatButton.height=${cb?.height} " +
+                    "hideButton.height=${hb?.height} hideButton.top=${hb?.top} chatButton.height=${cb?.height} chatButton.top=${cb?.top} " +
                     "speechCard.height=${sc?.height} speechCard.width=${sc?.width} " +
                     "petImage.height=${iv.height} petImage.top=${iv.top} " +
                     "showButtonPill.height=${sb?.height} showButtonPill.visibility=${sb?.visibility} showButtonPill.top=${sb?.top} " +
                     "petImage.getGlobalVisibleRect=${android.graphics.Rect().also { iv.getGlobalVisibleRect(it) }}"
             )
-            val sum = (topRow?.height ?: 0) + (sc?.height ?: 0) + iv.height + (sb?.height ?: 0)
+            val sum = (hb?.height ?: 0) + (cb?.height ?: 0) + (sc?.height ?: 0) + iv.height + (sb?.height ?: 0)
             android.util.Log.d(
                 "PetDebug",
-                "SELISIH: jumlah manual (topRow+speechCard+petImage+showButtonPill)=$sum vs petContainer.height=${pc?.height} " +
+                "SELISIH: jumlah manual (hideButton+chatButton+speechCard+petImage+showButtonPill)=$sum vs petContainer.height=${pc?.height} " +
                     "-> selisih=${(pc?.height ?: 0) - sum} " +
                     "childCount petContainer=${pc?.childCount}"
-            )
-            android.util.Log.d(
-                "PetDebug",
-                "LAYOUTPARAMS: speechCard.layoutParams=${sc?.layoutParams?.width}x${sc?.layoutParams?.height} " +
-                    "topButtonRow.layoutParams height=${topRow?.layoutParams?.height} " +
-                    "showButtonPill.layoutParams=${sb?.layoutParams?.width}x${sb?.layoutParams?.height} " +
-                    "windowParams.width=${params?.width} windowParams.height=${params?.height}"
             )
         }, 2000)
     }
@@ -921,22 +913,12 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             }
         }
 
-        // Row kecil buat 2 tombol pill (Hide + Chat) sejajar horizontal, di atas speechCard
-        val topButtonRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            )
-        }
-        topButtonRow.addView(hideButton)
-        topButtonRow.addView(View(this).apply {
-            layoutParams = LinearLayout.LayoutParams(8, LinearLayout.LayoutParams.WRAP_CONTENT)
-        })
-        topButtonRow.addView(chatButton)
-
-        petContainer.addView(topButtonRow)
+        // hideButton & chatButton ditaro LANGSUNG ke petContainer (vertikal), TANPA
+        // dibungkus LinearLayout tambahan lagi -- versi sebelumnya (nested topButtonRow
+        // horizontal) kena bug pengukuran window (WRAP_CONTENT dan bahkan tinggi piksel
+        // pasti sama-sama kebaca gak wajar). Ini hilangin akar masalahnya total.
+        petContainer.addView(hideButton)
+        petContainer.addView(chatButton)
         petContainer.addView(speechCard)
         petContainer.addView(petImage)
         petContainer.addView(showButtonPill)
