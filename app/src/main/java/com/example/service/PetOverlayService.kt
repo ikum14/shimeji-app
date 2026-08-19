@@ -1287,8 +1287,19 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         ).apply {
             gravity = Gravity.TOP or Gravity.START
             val p = params
-            x = (p?.x ?: 0)
-            y = ((p?.y ?: 0) - 20).coerceAtLeast(0)
+            // FIX: clamp posisi biar panel (lebar 280dp) SELALU muat penuh di layar --
+            // sebelumnya ngikutin posisi pet apa adanya, kalau pet lagi deket pinggir
+            // layar, tombol X-nya bisa kebawa keluar layar & gak kejangkau (nyaris
+            // freeze, gak ada cara nutup chat selain restart HP).
+            val density = resources.displayMetrics.density
+            val panelWidthPx = (280 * density).toInt()
+            val maxPanelHeightPx = (420 * density).toInt() // perkiraan aman, chat + input + judul
+            val screenW = resources.displayMetrics.widthPixels
+            val screenH = resources.displayMetrics.heightPixels
+            val maxX = (screenW - panelWidthPx).coerceAtLeast(0)
+            val maxY = (screenH - maxPanelHeightPx).coerceAtLeast(0)
+            x = (p?.x ?: 0).coerceIn(0, maxX)
+            y = ((p?.y ?: 0) - 20).coerceIn(0, maxY)
             softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
         }
 
