@@ -99,7 +99,6 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     private val chatSendingState = mutableStateOf(false)
 
     private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
-    private var fallingJob: Job? = null
     private var idleTimerJob: Job? = null
     private var behaviorJob: Job? = null
 
@@ -107,7 +106,6 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     private var isDraggingBerontak = false // udah ganti pose berontak apa belum (biar gak load ulang tiap ACTION_MOVE)
     private val DRAG_BERONTAK_THRESHOLD_MS = 3000L
     private val DRAG_HOLD_THRESHOLD_MS = 2500L // tahan sekian lama dulu baru drag beneran aktif -- biar tap sekilas gak ketriger drag
-    private var isFalling = false
     private var isPetHidden = false
 
     /** Job & durasi buat mekanisme "intip" -- pet nongol sebentar pas disembunyiin, lalu balik sembunyi lagi. */
@@ -465,7 +463,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                 val powerManager = getSystemService(android.content.Context.POWER_SERVICE) as? android.os.PowerManager
                 val isScreenOn = powerManager?.isInteractive ?: true
                 if (!isScreenOn) continue
-                if (isDragging || isFalling) continue
+                if (isDragging) continue
 
                 val now = System.currentTimeMillis()
 
@@ -651,31 +649,6 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             iv.setImageResource(resolveLocalCostumeDrawable(effectiveId, held))
         }
 
-        // DEBUG: cek ukuran tiap komponen satu-satu, 2 detik kemudian
-        iv.postDelayed({
-            val ov = overlayView
-            val pc = petContainerRef
-            val hb = hideButton
-            val cb = chatButton
-            val sc = speechCard
-            val sb = showButtonPill
-            android.util.Log.d(
-                "PetDebug",
-                "SATU-SATU: overlayView.height=${ov?.height} petContainer.height=${pc?.height} " +
-                    "hideButton.height=${hb?.height} hideButton.top=${hb?.top} chatButton.height=${cb?.height} chatButton.top=${cb?.top} " +
-                    "speechCard.height=${sc?.height} speechCard.width=${sc?.width} " +
-                    "petImage.height=${iv.height} petImage.top=${iv.top} " +
-                    "showButtonPill.height=${sb?.height} showButtonPill.visibility=${sb?.visibility} showButtonPill.top=${sb?.top} " +
-                    "petImage.getGlobalVisibleRect=${android.graphics.Rect().also { iv.getGlobalVisibleRect(it) }}"
-            )
-            val sum = (hb?.height ?: 0) + (cb?.height ?: 0) + (sc?.height ?: 0) + iv.height + (sb?.height ?: 0)
-            android.util.Log.d(
-                "PetDebug",
-                "SELISIH: jumlah manual (hideButton+chatButton+speechCard+petImage+showButtonPill)=$sum vs petContainer.height=${pc?.height} " +
-                    "-> selisih=${(pc?.height ?: 0) - sum} " +
-                    "childCount petContainer=${pc?.childCount}"
-            )
-        }, 2000)
     }
 
     /**
@@ -961,11 +934,9 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                 when (event.action) {
                     MotionEvent.ACTION_DOWN -> {
                         clickTime = System.currentTimeMillis()
-                        fallingJob?.cancel()
                         isDragging = false
                         holdEngaged = false
                         isDraggingBerontak = false
-                        isFalling = false
                         behaviorState = PetBehaviorState.IDLE
                         behaviorTicksRemaining = 0
 
@@ -1075,7 +1046,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         behaviorJob = serviceScope.launch {
             while (true) {
                 delay(TICK_MS)
-                if (isDragging || isFalling || isPetHidden) continue
+                if (isDragging || isPetHidden) continue
                 val p = params ?: continue
                 val displayMetrics = resources.displayMetrics
                 val floorY = displayMetrics.heightPixels - 300
@@ -1378,16 +1349,6 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         if (isPetHidden) {
             hideButton?.visibility = View.GONE
             showButtonPill?.visibility = View.VISIBLE
-            showButtonPill?.post {
-                android.util.Log.d(
-                    "PetDebug",
-                    "TOGGLE HIDE: showButtonPill.visibility=${showButtonPill?.visibility} " +
-                        "showButtonPill.height=${showButtonPill?.height} showButtonPill.width=${showButtonPill?.width} " +
-                        "showButtonPill.top=${showButtonPill?.top} " +
-                        "showButtonPill.getGlobalVisibleRect=${android.graphics.Rect().also { showButtonPill?.getGlobalVisibleRect(it) }} " +
-                        "petContainer.height=${petContainerRef?.height} overlayView.height=${overlayView?.height}"
-                )
-            }
             playPintuTransitionThen {
                 if (isPetHidden) {
                     speechCard?.visibility = View.GONE
@@ -1413,7 +1374,6 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
     override fun onDestroy() {
         super.onDestroy()
-        fallingJob?.cancel()
         idleTimerJob?.cancel()
         behaviorJob?.cancel()
         com.example.data.TtsSpeaker.shutdown()
