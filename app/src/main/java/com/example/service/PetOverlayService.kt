@@ -1192,7 +1192,11 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                     shape = RoundedCornerShape(16.dp),
                     color = Color(0xFF1A1A1A),
                     shadowElevation = 8.dp,
-                    modifier = Modifier.width(280.dp)
+                    // FIX: dikasih height PASTI juga (bukan cuma width), sama kayak
+                    // pola bug topButtonRow kemarin -- window WRAP_CONTENT tanpa batas
+                    // tinggi jelas bisa kebaca lebih gede dari yang keliatan, area
+                    // "hantu" di bawahnya nutupin sentuhan ke app lain di bawahnya.
+                    modifier = Modifier.width(280.dp).heightIn(max = 360.dp)
                 ) {
                     Column(modifier = Modifier.padding(12.dp)) {
                         Row(
@@ -1275,6 +1279,16 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             WindowManager.LayoutParams.TYPE_PHONE
         }
 
+        // Posisi window di-clamp pake perkiraan lebar/tinggi MAKSIMAL (buat jaga-jaga
+        // panel gak kepotong di pinggir layar) -- tapi ukuran window SENDIRI tetap
+        // WRAP_CONTENT, biar ngikutin Compose yang udah dibatesin heightIn(max=360.dp)
+        // di atas. Beda dari kasus topButtonRow kemarin (LinearLayout klasik nested,
+        // rawan salah ukur) -- ini murni ComposeView, harusnya ngukur diri sendiri
+        // lebih akurat selama batasnya dikasih di level Compose (heightIn).
+        val chatDensity = resources.displayMetrics.density
+        val chatPanelWidthPx = (280 * chatDensity).toInt()
+        val chatMaxPanelHeightPx = (400 * chatDensity).toInt() // buat clamp posisi doang
+
         chatOverlayParams = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -1287,17 +1301,14 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         ).apply {
             gravity = Gravity.TOP or Gravity.START
             val p = params
-            // FIX: clamp posisi biar panel (lebar 280dp) SELALU muat penuh di layar --
-            // sebelumnya ngikutin posisi pet apa adanya, kalau pet lagi deket pinggir
-            // layar, tombol X-nya bisa kebawa keluar layar & gak kejangkau (nyaris
-            // freeze, gak ada cara nutup chat selain restart HP).
-            val density = resources.displayMetrics.density
-            val panelWidthPx = (280 * density).toInt()
-            val maxPanelHeightPx = (420 * density).toInt() // perkiraan aman, chat + input + judul
+            // FIX: clamp posisi biar panel SELALU muat penuh di layar -- sebelumnya
+            // ngikutin posisi pet apa adanya, kalau pet lagi deket pinggir layar,
+            // tombol X-nya bisa kebawa keluar layar & gak kejangkau (nyaris freeze,
+            // gak ada cara nutup chat selain restart HP).
             val screenW = resources.displayMetrics.widthPixels
             val screenH = resources.displayMetrics.heightPixels
-            val maxX = (screenW - panelWidthPx).coerceAtLeast(0)
-            val maxY = (screenH - maxPanelHeightPx).coerceAtLeast(0)
+            val maxX = (screenW - chatPanelWidthPx).coerceAtLeast(0)
+            val maxY = (screenH - chatMaxPanelHeightPx).coerceAtLeast(0)
             x = (p?.x ?: 0).coerceIn(0, maxX)
             y = ((p?.y ?: 0) - 20).coerceIn(0, maxY)
             softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
