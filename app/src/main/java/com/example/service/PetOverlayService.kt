@@ -667,7 +667,12 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                 .data(customPath)
                 .target(iv)
                 .crossfade(true)
-                .placeholder(fallbackRes)
+                // GAK dikasih .placeholder() di sini -- file-nya udah dipastiin ADA
+                // (dicek File.exists() di atas), jadi gak perlu paksa "reset ke default"
+                // dulu sebelum pose custom-nya kemuat. Gambar SEBELUMNYA (pose lama)
+                // tetep nampil sampe yang baru selesai load, baru crossfade -- gak ada
+                // lagi kelip balik ke default tiap kali pose berganti (tap/drag/dll).
+                // .error() tetep dipasang, jaga-jaga kalau filenya somehow rusak/gagal baca.
                 .error(fallbackRes)
                 .build()
             loader.enqueue(request)
