@@ -191,6 +191,22 @@ object TtsSpeaker {
         tts?.setPitch(TtsVoiceSettings.getPitch(ctx))
         tts?.setSpeechRate(TtsVoiceSettings.getSpeed(ctx))
 
+        // FIX: locale suara sebelumnya di-set SEKALI doang pas engine connect (hardcode
+        // Indonesia), gak pernah ke-update lagi walau toggle bahasa diubah -- makanya
+        // teks Inggris tetep dibacain pake "logat" Indonesia. Sekarang dicek ULANG tiap
+        // kali speak() dipanggil, ngikutin toggle bahasa yang aktif saat itu.
+        val targetLocale = if (TtsVoiceSettings.getLanguage(ctx) == "en") {
+            Locale.US
+        } else {
+            Locale("id", "ID")
+        }
+        val langResult = tts?.setLanguage(targetLocale)
+        if (langResult == TextToSpeech.LANG_MISSING_DATA || langResult == TextToSpeech.LANG_NOT_SUPPORTED) {
+            // Data suara buat bahasa itu belum ada di HP -- biarin pakai locale
+            // sebelumnya (device default) daripada gagal total ngomong.
+            tts?.language = Locale.getDefault()
+        }
+
         val pauseAtEmoji = TtsVoiceSettings.getPauseAtEmoji(ctx)
         val segments = buildSpeechSegments(text, pauseAtEmoji)
         if (segments.isEmpty()) {

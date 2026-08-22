@@ -384,7 +384,11 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         }
 
         isReadingVaultFile = true
-        speakBubble("📖 Lagi baca \"$fileName\" nih, Master...")
+        val lang = currentLanguage()
+        speakBubble(
+            if (lang == "en") "📖 Reading \"$fileName\" now, Master..."
+            else "📖 Lagi baca \"$fileName\" nih, Master..."
+        )
 
         // Beneran nunggu TTS ngasih sinyal "kelar ngomong" (bukan nebak durasi pakai jumlah
         // karakter) -- baru abis itu balik ngoceh normal. Kalau nebak durasi kependekan,
@@ -392,7 +396,10 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         com.example.data.TtsSpeaker.speak(content) {
             com.example.data.VaultReadingManager.markAsRead(applicationContext, file)
             isReadingVaultFile = false
-            speakBubble("✅ Selesai baca \"$fileName\"! Makasih udah kasih bacaan baru, Master~")
+            speakBubble(
+                if (lang == "en") "✅ Done reading \"$fileName\"! Thanks for the new reading material, Master~"
+                else "✅ Selesai baca \"$fileName\"! Makasih udah kasih bacaan baru, Master~"
+            )
         }
     }
 
