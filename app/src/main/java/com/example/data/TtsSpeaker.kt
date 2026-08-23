@@ -23,6 +23,10 @@ import java.util.Locale
  *
  * Suara yang dipakai adalah suara yang SUDAH TERINSTALL di HP (dari Google TTS
  * atau engine TTS lain yang terpasang) — bukan suara custom/rekaman sendiri.
+ *
+ * OPTIMIZATION: TTS requests are now cancellable -- if a new speak() is called
+ * while one is in progress, the previous one is interrupted to avoid memory
+ * buildup from queued utterances.
  */
 object TtsSpeaker {
     private var tts: TextToSpeech? = null
@@ -34,6 +38,9 @@ object TtsSpeaker {
     // gak saling numpuk/ketiban satu sama lain.
     private val pendingDoneCallbacks = mutableMapOf<String, () -> Unit>()
     private val mainHandler = Handler(Looper.getMainLooper())
+
+    // Track the currently active speech session to allow cancellation
+    private var currentUtteranceBaseId: String? = null
 
     private const val PREFS_NAME = "pet_tts_engine_prefs"
     private const val KEY_ENGINE_PACKAGE = "selected_engine_package"
@@ -124,6 +131,7 @@ object TtsSpeaker {
         tts?.shutdown()
         tts = null
         isReady = false
+        currentUtteranceBaseId = null
         connectToEngine(context, enginePackage)
     }
 
@@ -177,6 +185,25 @@ object TtsSpeaker {
         mainHandler.post { callback() }
     }
 
+    /**
+     * Cancel ongoing TTS speech immediately and clear all pending callbacks.
+     * This prevents memory buildup from queued utterances when a new speak() is called
+     * while one is already in progress.
+     *
+     * OPTIMIZATION: Interrupt previous speech before starting new one.
+     */
+    private fun cancelCurrentSpeech() {
+        try {
+            tts?.stop()
+        } catch (e: Exception) {
+            // ignore -- TTS might not be ready
+        }
+        synchronized(pendingDoneCallbacks) {
+            pendingDoneCallbacks.clear()
+        }
+        currentUtteranceBaseId = null
+    }
+
     fun speak(text: String, onDone: (() -> Unit)? = null) {
         if (!isReady || text.isBlank()) {
             onDone?.invoke()
@@ -187,6 +214,10 @@ object TtsSpeaker {
             onDone?.invoke() // tetep panggil onDone walau mute, biar caller (misal mode baca) gak nyangkut nunggu selamanya
             return
         }
+
+        // OPTIMIZATION: Cancel any ongoing TTS before starting new one
+        // This prevents memory buildup from queued utterances
+        cancelCurrentSpeech()
 
         tts?.setPitch(TtsVoiceSettings.getPitch(ctx))
         tts?.setSpeechRate(TtsVoiceSettings.getSpeed(ctx))
@@ -219,6 +250,7 @@ object TtsSpeaker {
             putInt(TextToSpeech.Engine.KEY_PARAM_STREAM, AudioManager.STREAM_NOTIFICATION)
         }
         val baseId = System.currentTimeMillis().toString()
+        currentUtteranceBaseId = baseId
         val lastSegmentId = "$baseId-${segments.lastIndex}"
         if (onDone != null) {
             synchronized(pendingDoneCallbacks) { pendingDoneCallbacks[lastSegmentId] = onDone }
@@ -275,14 +307,14 @@ object TtsSpeaker {
     }
 
     fun shutdown() {
-        tts?.stop()
+        cancelCurrentSpeech()
         tts?.shutdown()
         tts = null
         isReady = false
     }
 
     /**
-     * Maksa putus & nyambung ulang ke engine TTS -- kalau Master udah pernah milih engine
+     * Maksa putus & nyambung ulang ke engine TTS -- kalau Master udah pernah pilih engine
      * eksplisit lewat dashboard, ini bakal connect ke situ lagi. Kalau belum pernah milih
      * sama sekali, coba nebak default sistem (perilaku lama, gak selalu reliable).
      */
@@ -292,6 +324,7 @@ object TtsSpeaker {
         tts?.shutdown()
         tts = null
         isReady = false
+        currentUtteranceBaseId = null
         connectToEngine(context, saved)
     }
 }
