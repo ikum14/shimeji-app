@@ -90,6 +90,12 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     private var chatButton: TextView? = null
     private var petContainerRef: LinearLayout? = null
 
+    /** speechCard sekarang jadi window WindowManager TERPISAH dari window pet utama
+     * (bukan child di petContainer lagi) -- biar area "kotak lebar" bubble-nya gak
+     * pernah nge-block sentuhan ke app di bawahnya. Window ini dikasih FLAG_NOT_TOUCHABLE,
+     * jadi APAPUN ukurannya, sentuhan tembus lurus ke apapun di baliknya. */
+    private var speechBubbleParams: WindowManager.LayoutParams? = null
+
     /** Panel chat -- window WindowManager TERPISAH dari pet (bukan nempel di petContainer),
      * supaya bisa FOCUSABLE (nerima keyboard) tanpa ngubah flag window pet utama sama sekali.
      * null kalau lagi ketutup. */
@@ -614,10 +620,104 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         if (p.y > maxY) p.y = maxY
         if (p.y < 0) p.y = 0
 
-        // Selalu update (bukan cuma pas posisi berubah) -- window WRAP_CONTENT nggak auto resize
-        // sendiri tiap konten berubah ukuran, harus dipaksa lewat updateViewLayout tiap saat.
+        updateOverlayWindowPosition(p)
+    }
+
+    /** Satu pintu buat update posisi window pet utama -- SEKALIAN sinkronin posisi window
+     * bubble ngomong biar selalu ngikutin pet ke mana pun dia digeser/jalan. Ganti semua
+     * pemanggilan windowManager.updateViewLayout(overlayView, p) langsung jadi lewat sini. */
+    private fun updateOverlayWindowPosition(p: WindowManager.LayoutParams) {
         try {
             windowManager.updateViewLayout(overlayView, p)
+        } catch (e: Exception) {
+            // Overlay lagi nggak siap/service berhenti, abaikan
+        }
+        syncSpeechBubblePosition(p)
+    }
+
+    /** Bikin window bubble ngomong TERPISAH dari window pet utama, sekali doang pas overlay
+     * pertama kali di-spawn. FLAG_NOT_TOUCHABLE dipasang khusus di window ini -- apapun
+     * ukuran bubble-nya (lebar 230dp dkk), sentuhan SELALU tembus ke app di bawahnya,
+     * gak akan pernah lagi nge-block klik ke app lain kayak sebelumnya. */
+    private fun createSpeechBubbleWindow() {
+        val bubbleView = ComposeView(this).apply {
+            setViewTreeLifecycleOwner(this@PetOverlayService)
+            setViewTreeSavedStateRegistryOwner(this@PetOverlayService)
+            setContent {
+                val text by remember { speechBubbleTextState }
+                val mood by remember { bubbleMoodState }
+                val fontSizeSp by com.example.data.BubbleSettings.fontSizeSp.collectAsState()
+                val useMoodColor by com.example.data.BubbleStyleSettings.useMoodColor.collectAsState()
+                val customBgColor by com.example.data.BubbleStyleSettings.bgColor.collectAsState()
+                val customTextColor by com.example.data.BubbleStyleSettings.textColor.collectAsState()
+                val bgColor = if (useMoodColor) {
+                    Color(com.example.data.BubbleStyleSettings.getEffectiveBgColor(mood))
+                } else {
+                    Color(customBgColor)
+                }
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = bgColor,
+                    shadowElevation = 6.dp,
+                    modifier = Modifier
+                        .width(230.dp)
+                        .heightIn(min = 56.dp, max = 110.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .padding(horizontal = 14.dp, vertical = 8.dp)
+                            .verticalScroll(rememberScrollState()),
+                        contentAlignment = Alignment.CenterStart
+                    ) {
+                        Text(
+                            text = text,
+                            fontSize = fontSizeSp.sp,
+                            color = Color(customTextColor)
+                        )
+                    }
+                }
+            }
+        }
+
+        val layoutFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+        } else {
+            @Suppress("DEPRECATION")
+            WindowManager.LayoutParams.TYPE_PHONE
+        }
+
+        val bubbleParams = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            layoutFlag,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            x = params?.x ?: 0
+            y = params?.y ?: 0
+        }
+
+        try {
+            windowManager.addView(bubbleView, bubbleParams)
+            speechCard = bubbleView
+            speechBubbleParams = bubbleParams
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    /** Ikutin posisi window pet utama tiap kali pet-nya digeser/jalan/reposisi, taro bubble
+     * pas di atas pet-nya (sedikit di atas titik y pet). */
+    private fun syncSpeechBubblePosition(p: WindowManager.LayoutParams) {
+        val bp = speechBubbleParams ?: return
+        val bubbleView = speechCard ?: return
+        bp.x = p.x
+        bp.y = (p.y - 20).coerceAtLeast(0)
+        try {
+            windowManager.updateViewLayout(bubbleView, bp)
         } catch (e: Exception) {
             // Overlay lagi nggak siap/service berhenti, abaikan
         }
@@ -807,50 +907,8 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         }
         petContainerRef = petContainer
 
-        // Speech Bubble View — pakai Compose, ukuran TETAP dari awal (bukan WRAP_CONTENT dinamis)
-        // supaya window WindowManager di luar nggak pernah perlu resize ulang sama sekali.
-        speechCard = ComposeView(this).apply {
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            )
-            setViewTreeLifecycleOwner(this@PetOverlayService)
-            setViewTreeSavedStateRegistryOwner(this@PetOverlayService)
-            setContent {
-                val text by remember { speechBubbleTextState }
-                val mood by remember { bubbleMoodState }
-                val fontSizeSp by com.example.data.BubbleSettings.fontSizeSp.collectAsState()
-                val useMoodColor by com.example.data.BubbleStyleSettings.useMoodColor.collectAsState()
-                val customBgColor by com.example.data.BubbleStyleSettings.bgColor.collectAsState()
-                val customTextColor by com.example.data.BubbleStyleSettings.textColor.collectAsState()
-                val bgColor = if (useMoodColor) {
-                    Color(com.example.data.BubbleStyleSettings.getEffectiveBgColor(mood))
-                } else {
-                    Color(customBgColor)
-                }
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = bgColor,
-                    shadowElevation = 6.dp,
-                    modifier = Modifier
-                        .width(230.dp)
-                        .heightIn(min = 56.dp, max = 110.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .padding(horizontal = 14.dp, vertical = 8.dp)
-                            .verticalScroll(rememberScrollState()),
-                        contentAlignment = Alignment.CenterStart
-                    ) {
-                        Text(
-                            text = text,
-                            fontSize = fontSizeSp.sp,
-                            color = Color(customTextColor)
-                        )
-                    }
-                }
-            }
-        }
+        // speechCard SENGAJA gak dibikin di sini lagi -- sekarang jadi window terpisah,
+        // dibikin sekali lewat createSpeechBubbleWindow() setelah window pet utama nempel.
 
         // Pet Image View
         petImage = ImageView(this).apply {
@@ -902,9 +960,11 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         // dibungkus LinearLayout tambahan lagi -- versi sebelumnya (nested topButtonRow
         // horizontal) kena bug pengukuran window (WRAP_CONTENT dan bahkan tinggi piksel
         // pasti sama-sama kebaca gak wajar). Ini hilangin akar masalahnya total.
+        // speechCard SENGAJA gak ditaro di sini lagi -- sekarang jadi window terpisah
+        // (lihat createSpeechBubbleWindow()), biar lebar 230dp-nya gak pernah nge-block
+        // sentuhan ke app di bawah pet.
         petContainer.addView(hideButton)
         petContainer.addView(chatButton)
-        petContainer.addView(speechCard)
         petContainer.addView(petImage)
         petContainer.addView(showButtonPill)
 
@@ -988,7 +1048,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                         if (holdEngaged && isDragging) {
                             p.x = initialX + (event.rawX - initialTouchX).toInt()
                             p.y = initialY + (event.rawY - initialTouchY).toInt()
-                            windowManager.updateViewLayout(overlayView, p)
+                            updateOverlayWindowPosition(p)
 
                             // Kelamaan di-drag -> ganti pose jadi berontak (cuma sekali)
                             if (!isDraggingBerontak && System.currentTimeMillis() - clickTime > DRAG_BERONTAK_THRESHOLD_MS) {
@@ -1042,11 +1102,18 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         try {
             windowManager.addView(overlayView, params)
             // FIX: window WRAP_CONTENT baru keukur bener sesudah petContainer (tombol +
-            // speechCard + petImage + showButtonPill) selesai ke-layout. Sebelum ini,
-            // clampWindowToScreen() cuma kepanggil pas bubble teks berubah -- artinya
-            // sebelum pet pertama kali "ngomong", window bisa lebih kecil dari
-            // seharusnya dan motong petImage di luar area yang bisa digambar/disentuh.
-            overlayView?.post { clampWindowToScreen() }
+            // petImage + showButtonPill) selesai ke-layout. Sebelum ini, clampWindowToScreen()
+            // cuma kepanggil pas bubble teks berubah -- artinya sebelum pet pertama kali
+            // "ngomong", window bisa lebih kecil dari seharusnya dan motong petImage di
+            // luar area yang bisa digambar/disentuh.
+            overlayView?.post {
+                clampWindowToScreen()
+                // Window bubble ngomong dibikin SEKALI di sini, setelah window pet utama
+                // beres nempel & keukur -- biar posisi awalnya (params.x/y) udah bener.
+                if (speechCard == null) {
+                    createSpeechBubbleWindow()
+                }
+            }
         } catch (e: Exception) {
             android.util.Log.e("PetDebug", "windowManager.addView GAGAL", e)
             e.printStackTrace()
@@ -1137,11 +1204,7 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         }
 
         if (moved) {
-            try {
-                windowManager.updateViewLayout(overlayView, p)
-            } catch (e: Exception) {
-                // View belum siap / service sedang berhenti, abaikan
-            }
+            updateOverlayWindowPosition(p)
         }
     }
 
@@ -1413,6 +1476,13 @@ class PetOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         com.example.data.TtsSpeaker.shutdown()
         closeChatOverlay()
         overlayView?.let {
+            try {
+                windowManager.removeView(it)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+        speechCard?.let {
             try {
                 windowManager.removeView(it)
             } catch (e: Exception) {
