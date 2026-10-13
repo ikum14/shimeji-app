@@ -59,6 +59,7 @@ class PetNotificationListenerService : NotificationListenerService() {
 
     override fun onListenerConnected() {
         super.onListenerConnected()
+        com.example.data.N8nMonitor.start(applicationContext)
     }
 
     /** Koneksi listener notifikasi putus (misal app-nya ke-restart paksa/force-close) --
